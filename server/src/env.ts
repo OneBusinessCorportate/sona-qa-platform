@@ -7,16 +7,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing required env var: ${name}`);
-  return v;
+// Returns the first non-empty env var among the given names, or throws.
+function requiredAny(...names: string[]): string {
+  for (const name of names) {
+    const v = process.env[name];
+    if (v) return v;
+  }
+  throw new Error(`Missing required env var (one of): ${names.join(', ')}`);
 }
 
 export const env = {
   port: Number(process.env.PORT ?? 8080),
-  supabaseUrl: required('SUPABASE_URL'),
-  supabaseServiceKey: required('SUPABASE_SERVICE_KEY'),
+  supabaseUrl: requiredAny('SUPABASE_URL'),
+  // Accept either name; Supabase's canonical is SUPABASE_SERVICE_ROLE_KEY.
+  supabaseServiceKey: requiredAny('SUPABASE_SERVICE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'),
   jwtSecret: process.env.JWT_SECRET ?? 'change-me',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
