@@ -9,6 +9,11 @@ export interface AuthedRequest extends Request {
 }
 
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  // Open access while auth is disabled — treat every request as an anonymous reviewer.
+  if (!env.authRequired) {
+    req.user = { id: 'anon', email: 'Sona', role: 'admin' };
+    return next();
+  }
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   if (!token) return res.status(401).json({ error: 'unauthorized' });

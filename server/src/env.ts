@@ -26,6 +26,8 @@ export const env = {
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
   adminEmail: process.env.SQA_ADMIN_EMAIL ?? '',
   adminPassword: process.env.SQA_ADMIN_PASSWORD ?? '',
+  // Auth is OFF by default for now (open access). Set REQUIRE_AUTH=true to re-enable login.
+  authRequired: (process.env.REQUIRE_AUTH ?? 'false') === 'true',
   cronEnabled: (process.env.CRON_ENABLED ?? 'false') === 'true',
   cronDaily: process.env.CRON_DAILY ?? '0 18 * * *',
   cronWeekly: process.env.CRON_WEEKLY ?? '0 9 * * 1',

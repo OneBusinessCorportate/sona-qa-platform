@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
-import { getToken, clearToken } from './api';
-import { Login } from './pages/Login';
+import { useState } from 'react';
 import { SonaForm } from './pages/SonaForm';
 import { SonaReport } from './pages/SonaReport';
 import { Tickets } from './pages/Tickets';
@@ -8,12 +6,7 @@ import { Tickets } from './pages/Tickets';
 type Tab = 'form' | 'report' | 'tickets';
 
 export function App() {
-  const [authed, setAuthed] = useState(Boolean(getToken()));
   const [tab, setTab] = useState<Tab>('form');
-
-  useEffect(() => { setAuthed(Boolean(getToken())); }, []);
-
-  if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
   return (
     <div className="app">
@@ -24,7 +17,6 @@ export function App() {
           <button className={tab === 'report' ? 'active' : ''} onClick={() => setTab('report')}>Отчёт по работе Соны</button>
           <button className={tab === 'tickets' ? 'active' : ''} onClick={() => setTab('tickets')}>Тикеты</button>
         </nav>
-        <button className="logout" onClick={() => { clearToken(); setAuthed(false); }}>Выйти</button>
       </header>
       <main className="content">
         {tab === 'form' && <SonaForm />}
