@@ -1,7 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Company } from '../api';
 
 interface ErrorItem { text: string; severity: string }
+
+// Areas of accounting paperwork Sona checks and rates per accountant.
+// NOTE (TODO): final list/weights to be confirmed with Sona/Lilit; the model
+// stores these under scores.areas, so areas can be changed without a migration.
+const AREAS = [
+  { id: 'primary_docs', label: 'Первичные документы' },
+  { id: 'taxes', label: 'Налоговые отчёты / декларации' },
+  { id: 'salary', label: 'Зарплата и кадры' },
+  { id: 'bank', label: 'Банк и сверки' },
+  { id: 'accuracy', label: 'Точность учёта / проводки' },
+  { id: 'deadlines', label: 'Соблюдение сроков' },
+];
 
 const RECORD_TYPES = [
   { value: 'other', label: 'Другое' },
@@ -15,12 +27,15 @@ const PRIORITIES = [
   { value: 'critical', label: 'Критический' },
 ];
 
+const SCORE_LABELS = ['', 'Плохо', 'Слабо', 'Норма', 'Хорошо', 'Отлично'];
+
 export function SonaForm() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [agrNo, setAgrNo] = useState('');
   const [accountant, setAccountant] = useState('');
   const [manager, setManager] = useState('');
-  const [scoreAccountant, setScoreAccountant] = useState<number | ''>('');
+
+  const [areaScores, setAreaScores] = useState<Record<string, number>>({});
   const [scoreClient, setScoreClient] = useState<number | ''>('');
   const [recordType, setRecordType] = useState('other');
   const [errors, setErrors] = useState<ErrorItem[]>([]);
@@ -28,7 +43,7 @@ export function SonaForm() {
   const [comment, setComment] = useState('');
   const [ticketPriority, setTicketPriority] = useState('medium');
   const [ticketUrgent, setTicketUrgent] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -37,7 +52,6 @@ export function SonaForm() {
 
   const selected = useMemo(() => companies.find((c) => c.agr_no === agrNo), [companies, agrNo]);
 
-  // Auto-fill accountant/manager when a company is picked.
   useEffect(() => {
     if (selected) {
       setAccountant(selected.accountant ?? '');
@@ -45,24 +59,39 @@ export function SonaForm() {
     }
   }, [selected]);
 
+  // Overall accountant score = average of rated areas (1 decimal).
+  const ratedValues = Object.values(areaScores).filter((v) => v > 0);
+  const overall = ratedValues.length
+    ? Math.round((ratedValues.reduce((a, b) => a + b, 0) / ratedValues.length) * 10) / 10
+    : null;
+
+  function setArea(id: string, value: number) {
+    setAreaScores((s) => ({ ...s, [id]: s[id] === value ? 0 : value }));
+  }
   function addError() { setErrors((e) => [...e, { text: '', severity: 'medium' }]); }
   function updateError(i: number, patch: Partial<ErrorItem>) {
     setErrors((e) => e.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function removeError(i: number) { setErrors((e) => e.filter((_, idx) => idx !== i)); }
 
+  function reset() {
+    setAreaScores({}); setScoreClient(''); setRecordType('other');
+    setErrors([]); setPraise(''); setComment(''); setTicketUrgent(false); setTicketPriority('medium');
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!agrNo) { setMsg('Выберите компанию'); return; }
-    setBusy(true); setMsg('');
+    if (!agrNo) { setMsg({ kind: 'err', text: 'Выберите компанию' }); return; }
+    setBusy(true); setMsg(null);
     try {
       const res = await api<{ review: any; ticket: any }>('/reviews', {
         method: 'POST',
         body: JSON.stringify({
           company_agr_no: agrNo,
           accountant, manager,
-          score_accountant: scoreAccountant === '' ? null : scoreAccountant,
+          score_accountant: overall,
           score_client: scoreClient === '' ? null : scoreClient,
+          scores: { areas: areaScores, overall, client: scoreClient === '' ? null : scoreClient },
           record_type: recordType,
           errors: errors.filter((it) => it.text.trim()),
           praise: praise || null,
@@ -71,93 +100,185 @@ export function SonaForm() {
           ticket_urgent: recordType === 'problem' ? ticketUrgent : false,
         }),
       });
-      setMsg(res.ticket ? '✓ Проверка сохранена. Создан тикет.' : '✓ Проверка сохранена.');
-      // Reset the per-review fields, keep company selected for convenience.
-      setScoreAccountant(''); setScoreClient(''); setRecordType('other');
-      setErrors([]); setPraise(''); setComment(''); setTicketUrgent(false); setTicketPriority('medium');
+      setMsg({ kind: 'ok', text: res.ticket ? 'Проверка сохранена. Создан тикет.' : 'Проверка сохранена.' });
+      reset();
     } catch (err) {
-      setMsg('Ошибка: ' + (err instanceof Error ? err.message : 'unknown'));
+      setMsg({ kind: 'err', text: 'Ошибка: ' + (err instanceof Error ? err.message : 'unknown') });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <form className="card form" onSubmit={submit}>
-      <h2>Ежедневная проверка качества</h2>
-
-      <label>Компания
-        <select value={agrNo} onChange={(e) => setAgrNo(e.target.value)}>
-          <option value="">— выберите компанию —</option>
-          {companies.map((c) => (
-            <option key={c.agr_no} value={c.agr_no}>
-              {c.name_agr ?? c.name_tax ?? c.agr_no} (№{c.agr_no})
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="row">
-        <label>Бухгалтер (авто)<input value={accountant} onChange={(e) => setAccountant(e.target.value)} /></label>
-        <label>Менеджер (авто)<input value={manager} onChange={(e) => setManager(e.target.value)} /></label>
-      </div>
-
-      <div className="row">
-        <label>Оценка бухгалтера
-          <input type="number" min={0} max={5} step={0.5} value={scoreAccountant}
-            onChange={(e) => setScoreAccountant(e.target.value === '' ? '' : Number(e.target.value))} />
-        </label>
-        <label>Оценка клиента
-          <input type="number" min={0} max={5} step={0.5} value={scoreClient}
-            onChange={(e) => setScoreClient(e.target.value === '' ? '' : Number(e.target.value))} />
-        </label>
-      </div>
-
-      <label>Тип записи
-        <select value={recordType} onChange={(e) => setRecordType(e.target.value)}>
-          {RECORD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-      </label>
-
-      <div className="errors-block">
-        <div className="errors-head">
-          <span>Ошибки / замечания</span>
-          <button type="button" onClick={addError}>+ добавить</button>
+    <form className="form-grid" onSubmit={submit}>
+      <div className="card">
+        <div className="card-title">
+          <h2>Проверка работы бухгалтера</h2>
+          <span className="muted small">Ежедневная проверка бухгалтерской документации и оценка</span>
         </div>
+
+        <CompanySelect companies={companies} value={agrNo} onChange={setAgrNo} />
+
+        {selected && (
+          <div className="company-info">
+            <InfoChip label="Бухгалтер" value={accountant || '—'} accent />
+            <InfoChip label="Менеджер" value={manager || '—'} />
+            <InfoChip label="ИНН/ՀՎՀՀ" value={selected.hvhh || '—'} />
+            <InfoChip label="Статус" value={selected.status} />
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h2>Оценка по областям бухучёта</h2>
+          {overall !== null && (
+            <span className={`overall-badge band-${Math.round(overall)}`}>Итог: {overall} · {SCORE_LABELS[Math.round(overall)]}</span>
+          )}
+        </div>
+        <div className="rating-list">
+          {AREAS.map((a) => (
+            <div className="rating-row" key={a.id}>
+              <span className="rating-label">{a.label}</span>
+              <RatingBar value={areaScores[a.id] ?? 0} onChange={(v) => setArea(a.id, v)} />
+            </div>
+          ))}
+        </div>
+        <div className="client-score">
+          <span className="rating-label">Дисциплина клиента (предоставление документов)</span>
+          <RatingBar value={typeof scoreClient === 'number' ? scoreClient : 0} onChange={(v) => setScoreClient(scoreClient === v ? '' : v)} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h2>Ошибки и замечания по документам</h2>
+          <button type="button" className="btn-soft" onClick={addError}>+ Добавить</button>
+        </div>
+        {errors.length === 0 && <p className="muted small">Замечаний нет. Добавьте, если в документации найдены ошибки.</p>}
         {errors.map((it, i) => (
-          <div className="row" key={i}>
-            <input placeholder="Описание ошибки/замечания" value={it.text}
+          <div className="error-item" key={i}>
+            <input placeholder="Что не так в документах / учёте" value={it.text}
               onChange={(e) => updateError(i, { text: e.target.value })} />
             <select value={it.severity} onChange={(e) => updateError(i, { severity: e.target.value })}>
               <option value="low">низкая</option>
               <option value="medium">средняя</option>
               <option value="high">высокая</option>
             </select>
-            <button type="button" className="ghost" onClick={() => removeError(i)}>×</button>
+            <button type="button" className="btn-icon" onClick={() => removeError(i)}>✕</button>
           </div>
         ))}
+
+        <div className="two-col">
+          <label>Похвала<textarea value={praise} onChange={(e) => setPraise(e.target.value)} rows={2} placeholder="Что сделано хорошо" /></label>
+          <label>Комментарий<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Доп. контекст" /></label>
+        </div>
       </div>
 
-      <label>Похвала<textarea value={praise} onChange={(e) => setPraise(e.target.value)} rows={2} /></label>
-      <label>Комментарий<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} /></label>
+      <div className="card">
+        <div className="card-title"><h2>Тип записи и тикет</h2></div>
+        <div className="type-pills">
+          {RECORD_TYPES.map((t) => (
+            <button type="button" key={t.value}
+              className={`type-pill t-${t.value} ${recordType === t.value ? 'active' : ''}`}
+              onClick={() => setRecordType(t.value)}>{t.label}</button>
+          ))}
+        </div>
 
-      {recordType === 'problem' && (
-        <div className="row ticket-opts">
-          <label>Приоритет тикета
-            <select value={ticketPriority} onChange={(e) => setTicketPriority(e.target.value)}>
-              {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-          </label>
-          <label className="checkbox">
-            <input type="checkbox" checked={ticketUrgent} onChange={(e) => setTicketUrgent(e.target.checked)} />
-            🔴 ОЧЕНЬ СРОЧНО
-          </label>
+        {recordType === 'problem' && (
+          <div className="ticket-box">
+            <p className="muted small">Запись «Проблема» автоматически создаст тикет.</p>
+            <div className="two-col">
+              <label>Приоритет тикета
+                <select value={ticketPriority} onChange={(e) => setTicketPriority(e.target.value)}>
+                  {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </label>
+              <label className="urgent-toggle">
+                <input type="checkbox" checked={ticketUrgent} onChange={(e) => setTicketUrgent(e.target.checked)} />
+                <span>🔴 ОЧЕНЬ СРОЧНО — исправить немедленно</span>
+              </label>
+            </div>
+          </div>
+        )}
+        {recordType !== 'problem' && (
+          <p className="muted small">Чисто позитивные записи («Похвала»/«Другое») тикет не создают.</p>
+        )}
+      </div>
+
+      <div className="submit-bar">
+        {msg && <div className={msg.kind === 'ok' ? 'success' : 'error'}>{msg.text}</div>}
+        <button disabled={busy} type="submit" className="btn-primary-lg">{busy ? 'Сохранение…' : 'Сохранить проверку'}</button>
+      </div>
+    </form>
+  );
+}
+
+function InfoChip({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`info-chip ${accent ? 'accent' : ''}`}>
+      <span className="info-label">{label}</span>
+      <span className="info-value">{value}</span>
+    </div>
+  );
+}
+
+function RatingBar({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="rating-bar">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button type="button" key={n}
+          className={`rate ${value >= n ? `on band-${value}` : ''}`}
+          onClick={() => onChange(n)} title={SCORE_LABELS[n]}>{n}</button>
+      ))}
+    </div>
+  );
+}
+
+function CompanySelect({ companies, value, onChange }: { companies: Company[]; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = companies.find((c) => c.agr_no === value);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const filtered = (q
+    ? companies.filter((c) =>
+        (c.name_agr ?? '').toLowerCase().includes(q) ||
+        (c.name_tax ?? '').toLowerCase().includes(q) ||
+        c.agr_no.includes(q) ||
+        (c.accountant ?? '').toLowerCase().includes(q))
+    : companies
+  ).slice(0, 60);
+
+  return (
+    <div className="combobox" ref={ref}>
+      <label>Компания</label>
+      <button type="button" className="combo-trigger" onClick={() => setOpen((o) => !o)}>
+        {selected ? `${selected.name_agr ?? selected.name_tax ?? selected.agr_no} (№${selected.agr_no})` : 'Выберите компанию…'}
+        <span className="chevron">▾</span>
+      </button>
+      {open && (
+        <div className="combo-pop">
+          <input autoFocus placeholder="Поиск по названию, №, бухгалтеру…" value={query}
+            onChange={(e) => setQuery(e.target.value)} />
+          <div className="combo-list">
+            {filtered.map((c) => (
+              <button type="button" key={c.agr_no} className={`combo-item ${c.agr_no === value ? 'sel' : ''}`}
+                onClick={() => { onChange(c.agr_no); setOpen(false); setQuery(''); }}>
+                <span>{c.name_agr ?? c.name_tax ?? c.agr_no}</span>
+                <span className="combo-meta">№{c.agr_no}{c.accountant ? ` · ${c.accountant}` : ''}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="muted small combo-empty">Ничего не найдено</div>}
+          </div>
         </div>
       )}
-
-      {msg && <div className={msg.startsWith('✓') ? 'success' : 'error'}>{msg}</div>}
-      <button disabled={busy} type="submit">{busy ? 'Сохранение…' : 'Сохранить проверку'}</button>
-      <p className="muted small">Запись типа «Проблема» автоматически создаёт тикет. Чисто позитивные записи тикет не создают.</p>
-    </form>
+    </div>
   );
 }
