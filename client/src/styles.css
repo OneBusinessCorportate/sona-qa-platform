@@ -119,6 +119,14 @@ textarea { resize: vertical; }
 .overall-badge.band-3 { background: #eab308; } .overall-badge.band-4 { background: #22c55e; }
 .overall-badge.band-5 { background: #16a34a; }
 
+/* Documents */
+.doc-list { display: flex; flex-direction: column; gap: 12px; }
+.doc-item { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.doc-head { display: flex; align-items: center; gap: 10px; }
+.doc-num { font-weight: 700; color: var(--muted); font-size: 13px; flex: 0 0 auto; width: 28px; }
+.doc-name { flex: 1; }
+.doc-note { margin-top: 10px; }
+
 /* Errors */
 .error-item { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
 .error-item > input { flex: 1; }

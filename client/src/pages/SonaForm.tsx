@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Company } from '../api';
 
 interface ErrorItem { text: string; severity: string }
+interface DocItem { name: string; score: number; note: string }
+
+// Common accounting document types Sona checks (suggestions for quick add).
+const DOC_TYPES = [
+  'Накладная', 'Счёт-фактура', 'Акт', 'Банковская выписка', 'Кассовый документ',
+  'Налоговая декларация', 'Зарплатная ведомость', 'Авансовый отчёт', 'Договор',
+];
 
 // Areas of accounting paperwork Sona checks and rates per accountant.
 // NOTE (TODO): final list/weights to be confirmed with Sona/Lilit; the model
@@ -35,6 +42,7 @@ export function SonaForm() {
   const [accountant, setAccountant] = useState('');
   const [manager, setManager] = useState('');
 
+  const [documents, setDocuments] = useState<DocItem[]>([]);
   const [areaScores, setAreaScores] = useState<Record<string, number>>({});
   const [scoreClient, setScoreClient] = useState<number | ''>('');
   const [recordType, setRecordType] = useState('other');
@@ -59,8 +67,11 @@ export function SonaForm() {
     }
   }, [selected]);
 
-  // Overall accountant score = average of rated areas (1 decimal).
-  const ratedValues = Object.values(areaScores).filter((v) => v > 0);
+  // Overall accountant score = average of all rated values (areas + documents).
+  const ratedValues = [
+    ...Object.values(areaScores).filter((v) => v > 0),
+    ...documents.map((d) => d.score).filter((v) => v > 0),
+  ];
   const overall = ratedValues.length
     ? Math.round((ratedValues.reduce((a, b) => a + b, 0) / ratedValues.length) * 10) / 10
     : null;
@@ -68,6 +79,11 @@ export function SonaForm() {
   function setArea(id: string, value: number) {
     setAreaScores((s) => ({ ...s, [id]: s[id] === value ? 0 : value }));
   }
+  function addDocument() { setDocuments((d) => [...d, { name: '', score: 0, note: '' }]); }
+  function updateDocument(i: number, patch: Partial<DocItem>) {
+    setDocuments((d) => d.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+  function removeDocument(i: number) { setDocuments((d) => d.filter((_, idx) => idx !== i)); }
   function addError() { setErrors((e) => [...e, { text: '', severity: 'medium' }]); }
   function updateError(i: number, patch: Partial<ErrorItem>) {
     setErrors((e) => e.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -75,7 +91,7 @@ export function SonaForm() {
   function removeError(i: number) { setErrors((e) => e.filter((_, idx) => idx !== i)); }
 
   function reset() {
-    setAreaScores({}); setScoreClient(''); setRecordType('other');
+    setDocuments([]); setAreaScores({}); setScoreClient(''); setRecordType('other');
     setErrors([]); setPraise(''); setComment(''); setTicketUrgent(false); setTicketPriority('medium');
   }
 
@@ -91,7 +107,12 @@ export function SonaForm() {
           accountant, manager,
           score_accountant: overall,
           score_client: scoreClient === '' ? null : scoreClient,
-          scores: { areas: areaScores, overall, client: scoreClient === '' ? null : scoreClient },
+          scores: {
+            areas: areaScores,
+            documents: documents.filter((d) => d.name.trim() || d.score > 0),
+            overall,
+            client: scoreClient === '' ? null : scoreClient,
+          },
           record_type: recordType,
           errors: errors.filter((it) => it.text.trim()),
           praise: praise || null,
@@ -127,6 +148,32 @@ export function SonaForm() {
             <InfoChip label="Статус" value={selected.status} />
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h2>Проверенные документы</h2>
+          <button type="button" className="btn-soft" onClick={addDocument}>+ Добавить документ</button>
+        </div>
+        {documents.length === 0 && (
+          <p className="muted small">Добавьте документы, которые проверяете, и оцените каждый. Можно несколько.</p>
+        )}
+        <datalist id="doc-types">{DOC_TYPES.map((d) => <option key={d} value={d} />)}</datalist>
+        <div className="doc-list">
+          {documents.map((d, i) => (
+            <div className="doc-item" key={i}>
+              <div className="doc-head">
+                <span className="doc-num">#{i + 1}</span>
+                <input list="doc-types" className="doc-name" placeholder="Тип / название документа"
+                  value={d.name} onChange={(e) => updateDocument(i, { name: e.target.value })} />
+                <RatingBar value={d.score} onChange={(v) => updateDocument(i, { score: d.score === v ? 0 : v })} />
+                <button type="button" className="btn-icon" onClick={() => removeDocument(i)}>✕</button>
+              </div>
+              <input className="doc-note" placeholder="Замечание по документу (необязательно)"
+                value={d.note} onChange={(e) => updateDocument(i, { note: e.target.value })} />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card">
