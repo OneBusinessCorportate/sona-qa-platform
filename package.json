@@ -5,7 +5,7 @@
   "description": "Sona QA platform — daily accounting-quality reviews, tickets and Telegram reports",
   "scripts": {
     "install:all": "npm --prefix server install && npm --prefix client install",
-    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install",
+    "build": "npm --prefix client install --include=dev && npm --prefix client run build && npm --prefix server install",
     "dev": "concurrently -n server,client -c green,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
     "start": "npm --prefix server start"
   },
