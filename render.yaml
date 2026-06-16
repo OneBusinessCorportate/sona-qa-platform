@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: sona-qa-platform
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TZ
+        value: Asia/Yerevan
+      - key: CRON_ENABLED
+        value: "false"
+      - key: CRON_DAILY
+        value: "0 18 * * *"
+      - key: CRON_WEEKLY
+        value: "0 9 * * 1"
+      # Secrets — set in the Render dashboard, do not commit:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SQA_ADMIN_EMAIL
+        sync: false
+      - key: SQA_ADMIN_PASSWORD
+        sync: false
