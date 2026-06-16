@@ -1,0 +1,1 @@
+# sona-qa-platform
