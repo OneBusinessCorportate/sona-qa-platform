@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
+import { computeEfficiency } from '../efficiency.js';
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -45,17 +46,27 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
     manager = manager ?? company?.manager ?? null;
   }
 
+  const errors = Array.isArray(b.errors) ? b.errors : [];
+  // Efficiency is recomputed server-side from the errors so the stored value is
+  // always trustworthy regardless of what the client sends.
+  const efficiency_pct = computeEfficiency(errors);
+
   const row = {
     company_agr_no: b.company_agr_no,
     accountant,
     manager,
     checking_date: b.checking_date ?? undefined,
+    period: b.period ?? null,
     reviewer: b.reviewer ?? req.user?.email ?? 'Sona',
+    report_type: b.report_type ?? null,
+    risk_level: b.risk_level ?? null,
     score_accountant: b.score_accountant ?? null,
     score_client: b.score_client ?? null,
+    efficiency_pct,
+    financials: Array.isArray(b.financials) ? b.financials : [],
     scores: b.scores ?? {},
     record_type: b.record_type ?? 'other',
-    errors: b.errors ?? [],
+    errors,
     praise: b.praise ?? null,
     comment: b.comment ?? null,
     quality_band: b.quality_band ?? null,

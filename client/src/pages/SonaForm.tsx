@@ -3,6 +3,35 @@ import { api, type Company } from '../api';
 
 interface ErrorItem { text: string; severity: string }
 interface DocItem { name: string; score: number; note: string }
+interface FinItem { kind: 'income' | 'expense'; amount: string; section: string; note: string; correct: boolean }
+
+// Reports Sona checks, in her order of priority (НДС first, then налог с оборота).
+const REPORT_TYPES = [
+  { value: 'vat', label: 'НДС' },
+  { value: 'turnover', label: 'Налог с оборота' },
+  { value: 'other', label: 'Другое' },
+];
+
+// Risk-based checking: Sona prioritises by degree of risk.
+const RISK_LEVELS = [
+  { value: 'low', label: 'Низкий' },
+  { value: 'medium', label: 'Средний' },
+  { value: 'high', label: 'Высокий' },
+];
+
+// Error severity per accounting standards: minor vs serious (Sona's grading).
+const SEVERITIES = [
+  { value: 'minor', label: 'незначительная' },
+  { value: 'serious', label: 'серьёзная' },
+];
+
+// Efficiency % = 100 − penalties. Mirror of server/src/efficiency.ts; keep in sync.
+const ERROR_PENALTY: Record<string, number> = { minor: 3, serious: 12, low: 3, medium: 6, high: 12 };
+function computeEfficiency(errors: ErrorItem[]): number {
+  const penalty = errors.reduce((s, e) => s + (ERROR_PENALTY[e.severity] ?? 3), 0);
+  return Math.max(0, Math.min(100, 100 - penalty));
+}
+const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
 
 // Common accounting document types Sona checks (suggestions for quick add).
 const DOC_TYPES = [
@@ -42,6 +71,10 @@ export function SonaForm() {
   const [accountant, setAccountant] = useState('');
   const [manager, setManager] = useState('');
 
+  const [reportType, setReportType] = useState('vat');
+  const [riskLevel, setRiskLevel] = useState('medium');
+  const [period, setPeriod] = useState('');
+  const [financials, setFinancials] = useState<FinItem[]>([]);
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [areaScores, setAreaScores] = useState<Record<string, number>>({});
   const [scoreClient, setScoreClient] = useState<number | ''>('');
@@ -76,6 +109,17 @@ export function SonaForm() {
     ? Math.round((ratedValues.reduce((a, b) => a + b, 0) / ratedValues.length) * 10) / 10
     : null;
 
+  // Auto-calculated accountant efficiency % (Sona's headline metric).
+  const efficiency = computeEfficiency(errors);
+
+  function addFinancial(kind: 'income' | 'expense') {
+    setFinancials((f) => [...f, { kind, amount: '', section: '', note: '', correct: true }]);
+  }
+  function updateFinancial(i: number, patch: Partial<FinItem>) {
+    setFinancials((f) => f.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+  function removeFinancial(i: number) { setFinancials((f) => f.filter((_, idx) => idx !== i)); }
+
   function setArea(id: string, value: number) {
     setAreaScores((s) => ({ ...s, [id]: s[id] === value ? 0 : value }));
   }
@@ -84,13 +128,14 @@ export function SonaForm() {
     setDocuments((d) => d.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function removeDocument(i: number) { setDocuments((d) => d.filter((_, idx) => idx !== i)); }
-  function addError() { setErrors((e) => [...e, { text: '', severity: 'medium' }]); }
+  function addError() { setErrors((e) => [...e, { text: '', severity: 'minor' }]); }
   function updateError(i: number, patch: Partial<ErrorItem>) {
     setErrors((e) => e.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function removeError(i: number) { setErrors((e) => e.filter((_, idx) => idx !== i)); }
 
   function reset() {
+    setReportType('vat'); setRiskLevel('medium'); setPeriod(''); setFinancials([]);
     setDocuments([]); setAreaScores({}); setScoreClient(''); setRecordType('other');
     setErrors([]); setPraise(''); setComment(''); setTicketUrgent(false); setTicketPriority('medium');
   }
@@ -105,12 +150,19 @@ export function SonaForm() {
         body: JSON.stringify({
           company_agr_no: agrNo,
           accountant, manager,
+          report_type: reportType,
+          risk_level: riskLevel,
+          period: period || null,
+          financials: financials
+            .filter((f) => f.amount.trim() || f.section.trim() || f.note.trim())
+            .map((f) => ({ ...f, amount: Number(f.amount.replace(',', '.')) || 0 })),
           score_accountant: overall,
           score_client: scoreClient === '' ? null : scoreClient,
           scores: {
             areas: areaScores,
             documents: documents.filter((d) => d.name.trim() || d.score > 0),
             overall,
+            efficiency,
             client: scoreClient === '' ? null : scoreClient,
           },
           record_type: recordType,
@@ -148,6 +200,67 @@ export function SonaForm() {
             <InfoChip label="Статус" value={selected.status} />
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-title"><h2>Параметры проверки</h2></div>
+        <label>Какой отчёт проверяется</label>
+        <div className="type-pills">
+          {REPORT_TYPES.map((t) => (
+            <button type="button" key={t.value}
+              className={`type-pill ${reportType === t.value ? 'active t-other' : ''}`}
+              onClick={() => setReportType(t.value)}>{t.label}</button>
+          ))}
+        </div>
+        <div className="two-col" style={{ marginTop: 14 }}>
+          <div>
+            <label>Степень риска</label>
+            <div className="type-pills">
+              {RISK_LEVELS.map((r) => (
+                <button type="button" key={r.value}
+                  className={`type-pill risk-${r.value} ${riskLevel === r.value ? 'active' : ''}`}
+                  onClick={() => setRiskLevel(r.value)}>{r.label}</button>
+              ))}
+            </div>
+          </div>
+          <label>Период (необязательно)
+            <input placeholder="напр. 05.2026 / 2-й кв." value={period} onChange={(e) => setPeriod(e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h2>Доходы и расходы</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn-soft" onClick={() => addFinancial('income')}>+ Доход</button>
+            <button type="button" className="btn-soft" onClick={() => addFinancial('expense')}>+ Расход</button>
+          </div>
+        </div>
+        {financials.length === 0 && (
+          <p className="muted small">Укажите, какую сумму и в какой раздел бухгалтер отнёс по доходам и расходам.</p>
+        )}
+        <div className="doc-list">
+          {financials.map((f, i) => (
+            <div className={`fin-item fin-${f.kind}`} key={i}>
+              <div className="fin-head">
+                <span className={`fin-tag fin-${f.kind}`}>{f.kind === 'income' ? 'Доход' : 'Расход'}</span>
+                <input className="fin-amount" inputMode="decimal" placeholder="Сумма"
+                  value={f.amount} onChange={(e) => updateFinancial(i, { amount: e.target.value })} />
+                <input className="fin-section" placeholder="Раздел / статья учёта"
+                  value={f.section} onChange={(e) => updateFinancial(i, { section: e.target.value })} />
+                <label className="fin-correct">
+                  <input type="checkbox" checked={f.correct}
+                    onChange={(e) => updateFinancial(i, { correct: e.target.checked })} />
+                  <span>верно</span>
+                </label>
+                <button type="button" className="btn-icon" onClick={() => removeFinancial(i)}>✕</button>
+              </div>
+              <input className="doc-note" placeholder="Комментарий (необязательно)"
+                value={f.note} onChange={(e) => updateFinancial(i, { note: e.target.value })} />
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card">
@@ -199,21 +312,23 @@ export function SonaForm() {
 
       <div className="card">
         <div className="card-title"><h2>Ошибки и замечания по документам</h2>
-          <button type="button" className="btn-soft" onClick={addError}>+ Добавить</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className={`overall-badge band-${effBand(efficiency)}`}>Эффективность: {efficiency}%</span>
+            <button type="button" className="btn-soft" onClick={addError}>+ Добавить</button>
+          </div>
         </div>
-        {errors.length === 0 && <p className="muted small">Замечаний нет. Добавьте, если в документации найдены ошибки.</p>}
+        {errors.length === 0 && <p className="muted small">Замечаний нет — эффективность 100%. Добавьте, если в документации найдены ошибки.</p>}
         {errors.map((it, i) => (
           <div className="error-item" key={i}>
             <input placeholder="Что не так в документах / учёте" value={it.text}
               onChange={(e) => updateError(i, { text: e.target.value })} />
             <select value={it.severity} onChange={(e) => updateError(i, { severity: e.target.value })}>
-              <option value="low">низкая</option>
-              <option value="medium">средняя</option>
-              <option value="high">высокая</option>
+              {SEVERITIES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <button type="button" className="btn-icon" onClick={() => removeError(i)}>✕</button>
           </div>
         ))}
+        <p className="muted small">Эффективность считается автоматически: −3% за незначительную ошибку, −12% за серьёзную.</p>
 
         <div className="two-col">
           <label>Похвала<textarea value={praise} onChange={(e) => setPraise(e.target.value)} rows={2} placeholder="Что сделано хорошо" /></label>

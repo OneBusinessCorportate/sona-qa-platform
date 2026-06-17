@@ -3,18 +3,21 @@ import { api } from '../api';
 
 interface Daily {
   date: string;
-  totals: { reviews: number; companies: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null };
-  byAccountant: Array<{ accountant: string; reviews: number; avg_score: number | null; problems: number }>;
+  totals: { reviews: number; companies: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null; avgEfficiency: number | null };
+  byAccountant: Array<{ accountant: string; reviews: number; avg_score: number | null; avg_efficiency: number | null; problems: number }>;
+  finance: { income: number; expense: number };
   openTickets: number; urgentTickets: number;
 }
 interface Weekly {
   weekStart: string;
-  totals: { reviews: number; companies: number; accountants: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null };
+  totals: { reviews: number; companies: number; accountants: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null; avgEfficiency: number | null };
   efficiency: { totalReviews: number; activeDays: number; avgPerDay: number | null };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const num = (v: number | null) => (v === null || v === undefined ? '—' : v);
+const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v}%`);
+const money = (v: number) => (v ?? 0).toLocaleString('ru-RU');
 
 export function SonaReport() {
   const [date, setDate] = useState(today());
@@ -53,8 +56,10 @@ export function SonaReport() {
             <div className="metrics">
               <Metric label="Проверок" value={daily.totals.reviews} />
               <Metric label="Компаний" value={daily.totals.companies} />
+              <Metric label="⚙️ Эффективность" value={pct(daily.totals.avgEfficiency)} />
               <Metric label="Проблем" value={daily.totals.problems} />
-              <Metric label="Похвал" value={daily.totals.praises} />
+              <Metric label="💰 Доходы" value={money(daily.finance.income)} />
+              <Metric label="💸 Расходы" value={money(daily.finance.expense)} />
               <Metric label="Ср. бухгалтер" value={num(daily.totals.avgAccountant)} />
               <Metric label="Ср. клиент" value={num(daily.totals.avgClient)} />
               <Metric label="Откр. тикетов" value={daily.openTickets} />
@@ -62,12 +67,12 @@ export function SonaReport() {
             </div>
             <h3>По бухгалтерам</h3>
             <table>
-              <thead><tr><th>Бухгалтер</th><th>Проверок</th><th>Ср. оценка</th><th>Проблем</th></tr></thead>
+              <thead><tr><th>Бухгалтер</th><th>Проверок</th><th>Ср. оценка</th><th>Эффективность</th><th>Проблем</th></tr></thead>
               <tbody>
                 {daily.byAccountant.map((a) => (
-                  <tr key={a.accountant}><td>{a.accountant}</td><td>{a.reviews}</td><td>{num(a.avg_score)}</td><td>{a.problems}</td></tr>
+                  <tr key={a.accountant}><td>{a.accountant}</td><td>{a.reviews}</td><td>{num(a.avg_score)}</td><td>{pct(a.avg_efficiency)}</td><td>{a.problems}</td></tr>
                 ))}
-                {daily.byAccountant.length === 0 && <tr><td colSpan={4} className="muted">Нет данных за день</td></tr>}
+                {daily.byAccountant.length === 0 && <tr><td colSpan={5} className="muted">Нет данных за день</td></tr>}
               </tbody>
             </table>
           </>
@@ -84,6 +89,7 @@ export function SonaReport() {
             <Metric label="Проверок" value={weekly.totals.reviews} />
             <Metric label="Компаний" value={weekly.totals.companies} />
             <Metric label="Бухгалтеров" value={weekly.totals.accountants} />
+            <Metric label="⚙️ Эффективность" value={pct(weekly.totals.avgEfficiency)} />
             <Metric label="Проблем" value={weekly.totals.problems} />
             <Metric label="Ср. бухгалтер" value={num(weekly.totals.avgAccountant)} />
             <Metric label="Эфф.: проверок" value={weekly.efficiency.totalReviews} />
