@@ -91,59 +91,12 @@ textarea { resize: vertical; }
 .combo-meta { font-size: 12px; color: var(--muted); }
 .combo-empty { padding: 12px; text-align: center; }
 
-/* Company info chips */
-.company-info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
-.info-chip { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.info-chip.accent { background: #eff4ff; border-color: #c7d7fe; }
-.info-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.info-value { display: block; font-size: 14px; font-weight: 600; margin-top: 3px; }
-
-/* Rating */
-.rating-list { display: flex; flex-direction: column; gap: 10px; }
-.rating-row, .client-score { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.client-score { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+/* Score label + badge */
 .rating-label { font-size: 14px; color: var(--text); }
-.rating-bar { display: flex; gap: 6px; flex: 0 0 auto; }
-.rate {
-  width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--line);
-  background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted);
-  transition: all .12s;
-}
-.rate:hover { border-color: var(--primary); }
-.rate.on { color: #fff; border-color: transparent; }
-.rate.band-1 { background: #ef4444; } .rate.band-2 { background: #f97316; }
-.rate.band-3 { background: #eab308; } .rate.band-4 { background: #22c55e; }
-.rate.band-5 { background: #16a34a; }
 .overall-badge { font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 999px; color: #fff; }
 .overall-badge.band-1 { background: #ef4444; } .overall-badge.band-2 { background: #f97316; }
 .overall-badge.band-3 { background: #eab308; } .overall-badge.band-4 { background: #22c55e; }
 .overall-badge.band-5 { background: #16a34a; }
-
-/* Documents */
-.doc-list { display: flex; flex-direction: column; gap: 12px; }
-.doc-item { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-.doc-head { display: flex; align-items: center; gap: 10px; }
-.doc-num { font-weight: 700; color: var(--muted); font-size: 13px; flex: 0 0 auto; width: 28px; }
-.doc-name { flex: 1; }
-.doc-note { margin-top: 10px; }
-
-/* Errors */
-.error-item { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
-.error-item > input { flex: 1; }
-.error-item > select { width: 160px; flex: 0 0 auto; }
-
-/* Income / expense line items */
-.fin-item { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px; border-left: 4px solid var(--line); }
-.fin-item.fin-income { border-left-color: #22c55e; }
-.fin-item.fin-expense { border-left-color: #f97316; }
-.fin-head { display: flex; align-items: center; gap: 10px; }
-.fin-tag { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-.fin-tag.fin-income { background: #f0fdf4; color: var(--success); }
-.fin-tag.fin-expense { background: #fff7ed; color: #c2410c; }
-.fin-amount { width: 130px; flex: 0 0 auto; }
-.fin-section { flex: 1; }
-.fin-correct { display: flex; align-items: center; gap: 6px; margin: 0; flex: 0 0 auto; color: var(--text); font-weight: 500; }
-.fin-correct input { width: auto; }
 
 /* Auditor report */
 .total-input { width: 90px; padding: 6px 8px; }
@@ -170,15 +123,12 @@ textarea { resize: vertical; }
 .btn-icon { width: 38px; height: 38px; flex: 0 0 auto; background: #fff; color: var(--danger); border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }
 .btn-icon:hover { background: #fef2f2; }
 
-/* Record type pills */
+/* Type / risk pills */
 .type-pills { display: flex; gap: 10px; flex-wrap: wrap; }
 .type-pill { padding: 9px 18px; border-radius: 10px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
-.type-pill.active.t-problem { background: #fef2f2; border-color: #fca5a5; color: var(--danger); }
-.type-pill.active.t-praise { background: #f0fdf4; border-color: #86efac; color: var(--success); }
 .type-pill.active.t-other { background: #eff4ff; border-color: #c7d7fe; color: var(--primary); }
 
-.ticket-box { margin-top: 14px; padding: 14px; background: #fff7f7; border: 1px solid #fecaca; border-radius: 12px; }
-.urgent-toggle { display: flex; align-items: center; gap: 8px; align-self: end; margin: 0; padding-bottom: 10px; color: var(--text); font-weight: 500; }
+.urgent-toggle { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); font-weight: 500; }
 .urgent-toggle input { width: auto; }
 
 /* Submit */
