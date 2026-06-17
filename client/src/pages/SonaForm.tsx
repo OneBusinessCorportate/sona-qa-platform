@@ -25,11 +25,24 @@ const SEVERITIES = [
   { value: 'serious', label: 'серьёзная' },
 ];
 
-// Efficiency % = 100 − penalties. Mirror of server/src/efficiency.ts; keep in sync.
-const ERROR_PENALTY: Record<string, number> = { minor: 3, serious: 12, low: 3, medium: 6, high: 12 };
-function computeEfficiency(errors: ErrorItem[]): number {
-  const penalty = errors.reduce((s, e) => s + (ERROR_PENALTY[e.severity] ?? 3), 0);
-  return Math.max(0, Math.min(100, 100 - penalty));
+// Sona's 9-point Yes/No checklist (mirror of server/src/efficiency.ts).
+// Оценка % = good answers / 9 * 100. `good` = the answer that scores a point.
+const CHECKLIST: Array<{ id: string; label: string; good: 'yes' | 'no' }> = [
+  { id: 'overdue',    label: 'Есть просрочка',                     good: 'no'  },
+  { id: 'signed',     label: 'Счета подписаны',                    good: 'yes' },
+  { id: 'correct',    label: 'Корректность и полнота',             good: 'yes' },
+  { id: 'confirmed',  label: 'Подтверждение цифр первичкой',       good: 'yes' },
+  { id: 'format',     label: 'Формат и техническая сдача',         good: 'yes' },
+  { id: 'errors',     label: 'Ошибки',                             good: 'no'  },
+  { id: 'desk_audit', label: 'Камеральные требования / уточнения', good: 'no'  },
+  { id: 'penalties',  label: 'Штрафы / уведомления',               good: 'no'  },
+  { id: 'standards',  label: 'Внутренние стандарты',               good: 'yes' },
+];
+type Checklist = Record<string, 'yes' | 'no'>;
+const defaultChecklist = (): Checklist => Object.fromEntries(CHECKLIST.map((c) => [c.id, c.good])) as Checklist;
+function checklistScore(c: Checklist): number {
+  const good = CHECKLIST.reduce((n, item) => n + (c[item.id] === item.good ? 1 : 0), 0);
+  return Math.round((good / CHECKLIST.length) * 10000) / 100;
 }
 const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
 
@@ -37,18 +50,6 @@ const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 4
 const DOC_TYPES = [
   'Накладная', 'Счёт-фактура', 'Акт', 'Банковская выписка', 'Кассовый документ',
   'Налоговая декларация', 'Зарплатная ведомость', 'Авансовый отчёт', 'Договор',
-];
-
-// Areas of accounting paperwork Sona checks and rates per accountant.
-// NOTE (TODO): final list/weights to be confirmed with Sona/Lilit; the model
-// stores these under scores.areas, so areas can be changed without a migration.
-const AREAS = [
-  { id: 'primary_docs', label: 'Первичные документы' },
-  { id: 'taxes', label: 'Налоговые отчёты / декларации' },
-  { id: 'salary', label: 'Зарплата и кадры' },
-  { id: 'bank', label: 'Банк и сверки' },
-  { id: 'accuracy', label: 'Точность учёта / проводки' },
-  { id: 'deadlines', label: 'Соблюдение сроков' },
 ];
 
 const RECORD_TYPES = [
@@ -76,7 +77,8 @@ export function SonaForm() {
   const [period, setPeriod] = useState('');
   const [financials, setFinancials] = useState<FinItem[]>([]);
   const [documents, setDocuments] = useState<DocItem[]>([]);
-  const [areaScores, setAreaScores] = useState<Record<string, number>>({});
+  const [checklist, setChecklist] = useState<Checklist>(defaultChecklist);
+  const [overdueDays, setOverdueDays] = useState('');
   const [scoreClient, setScoreClient] = useState<number | ''>('');
   const [recordType, setRecordType] = useState('other');
   const [errors, setErrors] = useState<ErrorItem[]>([]);
@@ -100,17 +102,12 @@ export function SonaForm() {
     }
   }, [selected]);
 
-  // Overall accountant score = average of all rated values (areas + documents).
-  const ratedValues = [
-    ...Object.values(areaScores).filter((v) => v > 0),
-    ...documents.map((d) => d.score).filter((v) => v > 0),
-  ];
-  const overall = ratedValues.length
-    ? Math.round((ratedValues.reduce((a, b) => a + b, 0) / ratedValues.length) * 10) / 10
-    : null;
+  // Оценка % — Sona's headline metric, computed live from the 9-point checklist.
+  const score = checklistScore(checklist);
 
-  // Auto-calculated accountant efficiency % (Sona's headline metric).
-  const efficiency = computeEfficiency(errors);
+  function setCheck(id: string, value: 'yes' | 'no') {
+    setChecklist((c) => ({ ...c, [id]: value }));
+  }
 
   function addFinancial(kind: 'income' | 'expense') {
     setFinancials((f) => [...f, { kind, amount: '', section: '', note: '', correct: true }]);
@@ -120,9 +117,6 @@ export function SonaForm() {
   }
   function removeFinancial(i: number) { setFinancials((f) => f.filter((_, idx) => idx !== i)); }
 
-  function setArea(id: string, value: number) {
-    setAreaScores((s) => ({ ...s, [id]: s[id] === value ? 0 : value }));
-  }
   function addDocument() { setDocuments((d) => [...d, { name: '', score: 0, note: '' }]); }
   function updateDocument(i: number, patch: Partial<DocItem>) {
     setDocuments((d) => d.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -136,7 +130,7 @@ export function SonaForm() {
 
   function reset() {
     setReportType('vat'); setRiskLevel('medium'); setPeriod(''); setFinancials([]);
-    setDocuments([]); setAreaScores({}); setScoreClient(''); setRecordType('other');
+    setDocuments([]); setChecklist(defaultChecklist()); setOverdueDays(''); setScoreClient(''); setRecordType('other');
     setErrors([]); setPraise(''); setComment(''); setTicketUrgent(false); setTicketPriority('medium');
   }
 
@@ -156,13 +150,13 @@ export function SonaForm() {
           financials: financials
             .filter((f) => f.amount.trim() || f.section.trim() || f.note.trim())
             .map((f) => ({ ...f, amount: Number(f.amount.replace(',', '.')) || 0 })),
-          score_accountant: overall,
+          score_accountant: score,
           score_client: scoreClient === '' ? null : scoreClient,
           scores: {
-            areas: areaScores,
+            checklist,
+            overdue_days: overdueDays ? Number(overdueDays) : null,
             documents: documents.filter((d) => d.name.trim() || d.score > 0),
-            overall,
-            efficiency,
+            score,
             client: scoreClient === '' ? null : scoreClient,
           },
           record_type: recordType,
@@ -291,19 +285,30 @@ export function SonaForm() {
 
       <div className="card">
         <div className="card-title">
-          <h2>Оценка по областям бухучёта</h2>
-          {overall !== null && (
-            <span className={`overall-badge band-${Math.round(overall)}`}>Итог: {overall} · {SCORE_LABELS[Math.round(overall)]}</span>
-          )}
+          <h2>Чек-лист проверки</h2>
+          <span className={`overall-badge band-${effBand(score)}`}>Оценка: {score}%</span>
         </div>
-        <div className="rating-list">
-          {AREAS.map((a) => (
-            <div className="rating-row" key={a.id}>
-              <span className="rating-label">{a.label}</span>
-              <RatingBar value={areaScores[a.id] ?? 0} onChange={(v) => setArea(a.id, v)} />
+        <div className="checklist">
+          {CHECKLIST.map((c) => (
+            <div className="check-row" key={c.id}>
+              <span className="rating-label">{c.label}</span>
+              <div className="yn">
+                <button type="button" className={`yn-btn ${checklist[c.id] === 'yes' ? (c.good === 'yes' ? 'good' : 'bad') : ''}`}
+                  onClick={() => setCheck(c.id, 'yes')}>Да</button>
+                <button type="button" className={`yn-btn ${checklist[c.id] === 'no' ? (c.good === 'no' ? 'good' : 'bad') : ''}`}
+                  onClick={() => setCheck(c.id, 'no')}>Нет</button>
+              </div>
             </div>
           ))}
+          {checklist.overdue === 'yes' && (
+            <div className="check-row">
+              <span className="rating-label">Просрочка — количество дней</span>
+              <input className="overdue-days" inputMode="numeric" placeholder="дней"
+                value={overdueDays} onChange={(e) => setOverdueDays(e.target.value)} />
+            </div>
+          )}
         </div>
+        <p className="muted small">Оценка считается автоматически: доля «хороших» ответов из 9 пунктов × 100%.</p>
         <div className="client-score">
           <span className="rating-label">Дисциплина клиента (предоставление документов)</span>
           <RatingBar value={typeof scoreClient === 'number' ? scoreClient : 0} onChange={(v) => setScoreClient(scoreClient === v ? '' : v)} />
@@ -312,12 +317,9 @@ export function SonaForm() {
 
       <div className="card">
         <div className="card-title"><h2>Ошибки и замечания по документам</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span className={`overall-badge band-${effBand(efficiency)}`}>Эффективность: {efficiency}%</span>
-            <button type="button" className="btn-soft" onClick={addError}>+ Добавить</button>
-          </div>
+          <button type="button" className="btn-soft" onClick={addError}>+ Добавить</button>
         </div>
-        {errors.length === 0 && <p className="muted small">Замечаний нет — эффективность 100%. Добавьте, если в документации найдены ошибки.</p>}
+        {errors.length === 0 && <p className="muted small">Детализация по ошибкам (необязательно). Сама оценка считается по чек-листу выше.</p>}
         {errors.map((it, i) => (
           <div className="error-item" key={i}>
             <input placeholder="Что не так в документах / учёте" value={it.text}
@@ -328,8 +330,6 @@ export function SonaForm() {
             <button type="button" className="btn-icon" onClick={() => removeError(i)}>✕</button>
           </div>
         ))}
-        <p className="muted small">Эффективность считается автоматически: −3% за незначительную ошибку, −12% за серьёзную.</p>
-
         <div className="two-col">
           <label>Похвала<textarea value={praise} onChange={(e) => setPraise(e.target.value)} rows={2} placeholder="Что сделано хорошо" /></label>
           <label>Комментарий<textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Доп. контекст" /></label>

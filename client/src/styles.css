@@ -145,6 +145,23 @@ textarea { resize: vertical; }
 .fin-correct { display: flex; align-items: center; gap: 6px; margin: 0; flex: 0 0 auto; color: var(--text); font-weight: 500; }
 .fin-correct input { width: auto; }
 
+/* Auditor report */
+.total-input { width: 90px; padding: 6px 8px; }
+.plan-row { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
+.plan-row > select { flex: 1; }
+.plan-count { width: 110px; flex: 0 0 auto; }
+.plan-row > input:not(.plan-count) { flex: 1; }
+
+/* Checklist (Yes/No criteria) */
+.checklist { display: flex; flex-direction: column; gap: 8px; }
+.check-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.check-row:last-child { border-bottom: none; }
+.yn { display: flex; gap: 6px; flex: 0 0 auto; }
+.yn-btn { width: 56px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+.yn-btn.good { background: #16a34a; border-color: transparent; color: #fff; }
+.yn-btn.bad { background: #ef4444; border-color: transparent; color: #fff; }
+.overdue-days { width: 120px; flex: 0 0 auto; }
+
 /* Risk pills */
 .type-pill.risk-low.active { background: #f0fdf4; border-color: #86efac; color: var(--success); }
 .type-pill.risk-medium.active { background: #fef3c7; border-color: #fcd34d; color: #b45309; }

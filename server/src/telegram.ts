@@ -9,7 +9,7 @@ export interface SendResult {
 
 // Sends an HTML message to the configured Telegram chat and logs it to
 // sqa_notifications (unique on kind+period_label prevents duplicate sends).
-export async function sendReport(kind: 'daily' | 'weekly', periodLabel: string, text: string): Promise<SendResult> {
+export async function sendReport(kind: 'daily' | 'weekly' | 'auditor', periodLabel: string, text: string): Promise<SendResult> {
   if (!telegramConfigured()) {
     console.warn('Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing) — skipping send.');
     return { ok: false, skipped: true, error: 'telegram_not_configured' };

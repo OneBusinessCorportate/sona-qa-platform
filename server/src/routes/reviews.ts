@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
-import { computeEfficiency } from '../efficiency.js';
+import { computeScore, scoreBand } from '../efficiency.js';
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -47,9 +47,13 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   }
 
   const errors = Array.isArray(b.errors) ? b.errors : [];
-  // Efficiency is recomputed server-side from the errors so the stored value is
+  const checklist = (b.scores && b.scores.checklist) || b.checklist || null;
+  // Оценка % is recomputed server-side from Sona's 9-point checklist (falling
+  // back to the legacy error-penalty for old data) so the stored value is
   // always trustworthy regardless of what the client sends.
-  const efficiency_pct = computeEfficiency(errors);
+  const efficiency_pct = computeScore(checklist, errors);
+  const points = scoreBand(efficiency_pct);
+  const scores = { ...(b.scores ?? {}), points };
 
   const row = {
     company_agr_no: b.company_agr_no,
@@ -64,7 +68,7 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
     score_client: b.score_client ?? null,
     efficiency_pct,
     financials: Array.isArray(b.financials) ? b.financials : [],
-    scores: b.scores ?? {},
+    scores,
     record_type: b.record_type ?? 'other',
     errors,
     praise: b.praise ?? null,

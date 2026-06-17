@@ -95,6 +95,69 @@ const n = (v: number | null | undefined) => (v === null || v === undefined ? '�
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v}%`);
 const money = (v: number) => v.toLocaleString('ru-RU');
 
+// "Дневной отчёт аудитора" — Sona's format: per-accountant "проверено/всего"
+// for the day plus the plan for the next day.
+export interface AuditorReport {
+  date: string;
+  planDate: string;
+  reports: Array<{ accountant: string; checked: number; total: number; avgScore: number | null }>;
+  plan: Array<{ accountant: string; planned_reports: number; note: string | null }>;
+}
+
+const nextDay = (date: string) => {
+  const d = new Date(date + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+const ddmmyy = (date: string) => {
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+};
+
+export async function buildAuditorReport(date: string): Promise<AuditorReport> {
+  const planDate = nextDay(date);
+  const { data: byAcc } = await supabase.from('sqa_accountant_daily').select('*').eq('checking_date', date);
+  const { data: workload } = await supabase.from('sqa_accountant_workload').select('accountant, total_reports');
+  const { data: plan } = await supabase
+    .from('sqa_daily_plan').select('accountant, planned_reports, note').eq('plan_date', planDate);
+
+  const totals = new Map<string, number>();
+  for (const w of workload ?? []) totals.set(w.accountant, w.total_reports ?? 0);
+
+  return {
+    date,
+    planDate,
+    reports: (byAcc ?? [])
+      .map((r) => ({
+        accountant: r.accountant,
+        checked: r.reviews_count ?? 0,
+        total: totals.get(r.accountant) ?? 0,
+        avgScore: r.avg_efficiency ?? null,
+      }))
+      .sort((a, b) => a.accountant.localeCompare(b.accountant)),
+    plan: (plan ?? []).map((p) => ({ accountant: p.accountant, planned_reports: p.planned_reports ?? 0, note: p.note ?? null })),
+  };
+}
+
+export function formatAuditorText(r: AuditorReport): string {
+  const lines = [`📑 <b>ЕЖЕДНЕВНЫЙ ОТЧЁТ АУДИТОРА — ${ddmmyy(r.date)}</b>`, ``, `<b>ОТЧЁТЫ:</b>`];
+  if (r.reports.length) {
+    r.reports.forEach((a, i) => {
+      const eff = a.avgScore === null ? '' : ` · ср. ${a.avgScore}%`;
+      lines.push(`${i + 1}. ${a.accountant} — ${a.checked}/${a.total} (проверено/всего)${eff}`);
+    });
+  } else {
+    lines.push('— за день проверок не зафиксировано');
+  }
+  lines.push(``, `<b>План на завтра: ${ddmmyy(r.planDate)}</b>`);
+  if (r.plan.length) {
+    for (const p of r.plan) lines.push(`${p.accountant} — ${p.planned_reports} отчётов${p.note ? ` (${p.note})` : ''}`);
+  } else {
+    lines.push('— план не задан');
+  }
+  return lines.join('\n');
+}
+
 export function formatDailyText(r: DailyReport): string {
   const lines = [
     `📋 <b>Отчёт Соны за ${r.date}</b>`,
