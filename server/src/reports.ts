@@ -92,7 +92,6 @@ export async function buildWeeklyReport(weekStart: string): Promise<WeeklyReport
 
 const n = (v: number | null | undefined) => (v === null || v === undefined ? '—' : String(v));
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v}%`);
-const money = (v: number) => v.toLocaleString('ru-RU');
 
 // "Дневной отчёт аудитора" — Sona's format: per-accountant "проверено/всего"
 // for the day plus the plan for the next day.
@@ -159,19 +158,16 @@ export function formatAuditorText(r: AuditorReport): string {
 
 export function formatDailyText(r: DailyReport): string {
   const lines = [
-    `📋 <b>Отчёт Соны за ${r.date}</b>`,
+    `📋 <b>Сводка за ${ddmmyy(r.date)}</b>`,
     ``,
     `Проверок: <b>${r.totals.reviews}</b> · Компаний: <b>${r.totals.companies}</b>`,
-    `Проблем: <b>${r.totals.problems}</b> · Похвал: <b>${r.totals.praises}</b>`,
-    `Средняя оценка — бухгалтер: <b>${n(r.totals.avgAccountant)}</b> · клиент: <b>${n(r.totals.avgClient)}</b>`,
-    `⚙️ Эффективность бухгалтеров: <b>${pct(r.totals.avgEfficiency)}</b>`,
-    `💰 Доходы: <b>${money(r.finance.income)}</b> · Расходы: <b>${money(r.finance.expense)}</b>`,
-    `Открытых тикетов: <b>${r.openTickets}</b> · 🔴 ОЧЕНЬ СРОЧНО: <b>${r.urgentTickets}</b>`,
+    `Средняя оценка: <b>${pct(r.totals.avgEfficiency)}</b> · Проблем: <b>${r.totals.problems}</b>`,
+    `Открытых тикетов: <b>${r.openTickets}</b> · 🔴 Срочных: <b>${r.urgentTickets}</b>`,
   ];
   if (r.byAccountant.length) {
     lines.push(``, `<b>По бухгалтерам:</b>`);
     for (const a of r.byAccountant) {
-      lines.push(`• ${a.accountant}: ${a.reviews} проверок, ср. ${n(a.avg_score)}, эфф. ${pct(a.avg_efficiency)}, проблем ${a.problems}`);
+      lines.push(`• ${a.accountant}: ${a.reviews} — ${pct(a.avg_efficiency)}${a.problems ? `, проблем ${a.problems}` : ''}`);
     }
   }
   return lines.join('\n');
@@ -179,13 +175,11 @@ export function formatDailyText(r: DailyReport): string {
 
 export function formatWeeklyText(r: WeeklyReport): string {
   return [
-    `🗓 <b>Недельный отчёт Соны (с ${r.weekStart})</b>`,
+    `🗓 <b>Недельный отчёт (с ${r.weekStart})</b>`,
     ``,
     `Проверок: <b>${r.totals.reviews}</b> · Компаний: <b>${r.totals.companies}</b> · Бухгалтеров: <b>${r.totals.accountants}</b>`,
-    `Проблем: <b>${r.totals.problems}</b> · Похвал: <b>${r.totals.praises}</b>`,
-    `Средняя оценка — бухгалтер: <b>${n(r.totals.avgAccountant)}</b> · клиент: <b>${n(r.totals.avgClient)}</b>`,
-    `⚙️ Эффективность бухгалтеров: <b>${pct(r.totals.avgEfficiency)}</b>`,
+    `Средняя оценка: <b>${pct(r.totals.avgEfficiency)}</b> · Проблем: <b>${r.totals.problems}</b>`,
     ``,
-    `<b>Эффективность Соны:</b> ${r.efficiency.totalReviews} проверок за ${r.efficiency.activeDays} дн. (≈ ${n(r.efficiency.avgPerDay)}/день)`,
+    `Объём проверок: ${r.efficiency.totalReviews} за ${r.efficiency.activeDays} дн. (≈ ${n(r.efficiency.avgPerDay)}/день)`,
   ].join('\n');
 }

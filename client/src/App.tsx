@@ -11,10 +11,10 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">Sona QA · качество бухучёта</div>
+        <div className="brand">Контроль качества</div>
         <nav className="tabs">
-          <button className={tab === 'form' ? 'active' : ''} onClick={() => setTab('form')}>Форма Соны</button>
-          <button className={tab === 'report' ? 'active' : ''} onClick={() => setTab('report')}>Отчёт по работе Соны</button>
+          <button className={tab === 'form' ? 'active' : ''} onClick={() => setTab('form')}>Проверка</button>
+          <button className={tab === 'report' ? 'active' : ''} onClick={() => setTab('report')}>Отчёты</button>
           <button className={tab === 'tickets' ? 'active' : ''} onClick={() => setTab('tickets')}>Тикеты</button>
         </nav>
       </header>

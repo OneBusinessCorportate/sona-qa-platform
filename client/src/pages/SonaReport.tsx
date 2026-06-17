@@ -3,41 +3,31 @@ import { api } from '../api';
 
 interface Daily {
   date: string;
-  totals: { reviews: number; companies: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null; avgEfficiency: number | null };
-  byAccountant: Array<{ accountant: string; reviews: number; avg_score: number | null; avg_efficiency: number | null; problems: number }>;
-  finance: { income: number; expense: number };
+  totals: { reviews: number; companies: number; problems: number; praises: number; avgEfficiency: number | null };
+  byAccountant: Array<{ accountant: string; reviews: number; avg_efficiency: number | null; problems: number }>;
   openTickets: number; urgentTickets: number;
-}
-interface Weekly {
-  weekStart: string;
-  totals: { reviews: number; companies: number; accountants: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null; avgEfficiency: number | null };
-  efficiency: { totalReviews: number; activeDays: number; avgPerDay: number | null };
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
-const num = (v: number | null) => (v === null || v === undefined ? '—' : v);
 const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v}%`);
-const money = (v: number) => (v ?? 0).toLocaleString('ru-RU');
 
 export function SonaReport() {
   const [date, setDate] = useState(today());
   const [daily, setDaily] = useState<Daily | null>(null);
-  const [weekly, setWeekly] = useState<Weekly | null>(null);
   const [sendMsg, setSendMsg] = useState('');
 
   async function load() {
     setDaily(await api<Daily>(`/reports/daily?date=${date}`));
-    setWeekly(await api<Weekly>('/reports/weekly'));
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
 
-  async function send(kind: 'daily' | 'weekly' | 'auditor') {
+  async function send(kind: 'daily' | 'auditor') {
     setSendMsg('Отправка…');
     try {
       const r = await api<{ ok: boolean; skipped?: boolean; error?: string }>('/reports/send', {
         method: 'POST', body: JSON.stringify({ kind, date }),
       });
-      setSendMsg(r.ok ? '✓ Отправлено в Telegram' : r.skipped ? 'Telegram не настроен (см. env)' : 'Ошибка: ' + r.error);
+      setSendMsg(r.ok ? '✓ Отправлено в Telegram' : r.skipped ? 'Telegram не настроен' : 'Ошибка: ' + r.error);
     } catch (e) {
       setSendMsg('Ошибка: ' + (e instanceof Error ? e.message : 'unknown'));
     }
@@ -49,7 +39,7 @@ export function SonaReport() {
 
       <div className="card">
         <div className="report-head">
-          <h2>Дневной отчёт</h2>
+          <h2>Сводка за день</h2>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <button onClick={() => send('daily')}>Отправить в Telegram</button>
         </div>
@@ -58,15 +48,11 @@ export function SonaReport() {
             <div className="metrics">
               <Metric label="Проверок" value={daily.totals.reviews} />
               <Metric label="Компаний" value={daily.totals.companies} />
-              <Metric label="⭐ Ср. оценка" value={pct(daily.totals.avgEfficiency)} />
+              <Metric label="Ср. оценка" value={pct(daily.totals.avgEfficiency)} />
               <Metric label="Проблем" value={daily.totals.problems} />
-              <Metric label="💰 Доходы" value={money(daily.finance.income)} />
-              <Metric label="💸 Расходы" value={money(daily.finance.expense)} />
-              <Metric label="Ср. клиент" value={num(daily.totals.avgClient)} />
-              <Metric label="Откр. тикетов" value={daily.openTickets} />
+              <Metric label="Тикетов" value={daily.openTickets} />
               <Metric label="🔴 Срочных" value={daily.urgentTickets} />
             </div>
-            <h3>По бухгалтерам</h3>
             <table>
               <thead><tr><th>Бухгалтер</th><th>Проверок</th><th>Ср. оценка</th><th>Проблем</th></tr></thead>
               <tbody>
@@ -77,25 +63,6 @@ export function SonaReport() {
               </tbody>
             </table>
           </>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="report-head">
-          <h2>Недельный отчёт + эффективность Соны</h2>
-          <button onClick={() => send('weekly')}>Отправить в Telegram</button>
-        </div>
-        {weekly && (
-          <div className="metrics">
-            <Metric label="Проверок" value={weekly.totals.reviews} />
-            <Metric label="Компаний" value={weekly.totals.companies} />
-            <Metric label="Бухгалтеров" value={weekly.totals.accountants} />
-            <Metric label="⭐ Ср. оценка" value={pct(weekly.totals.avgEfficiency)} />
-            <Metric label="Проблем" value={weekly.totals.problems} />
-            <Metric label="Эфф.: проверок" value={weekly.efficiency.totalReviews} />
-            <Metric label="Активных дней" value={weekly.efficiency.activeDays} />
-            <Metric label="≈ в день" value={num(weekly.efficiency.avgPerDay)} />
-          </div>
         )}
       </div>
 
@@ -116,7 +83,7 @@ interface Auditor {
 }
 interface PlanRow { accountant: string; planned_reports: number; note: string }
 
-// «Дневной отчёт аудитора» — формат Соны: проверено/всего по бухгалтерам + план на завтра.
+// Дневной отчёт аудитора: проверено/всего по бухгалтерам + план на завтра.
 function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: string) => void; onSend: () => void }) {
   const [data, setData] = useState<Auditor | null>(null);
   const [accountants, setAccountants] = useState<string[]>([]);
@@ -138,11 +105,11 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
 
   async function saveTotal(accountant: string) {
     await api('/reports/workload', { method: 'PUT', body: JSON.stringify({ accountant, total_reports: Number(totals[accountant]) || 0 }) });
-    setSaved('✓ Сохранено «всего отчётов»');
+    setSaved('✓ Сохранено');
   }
   async function savePlan() {
     await api('/reports/plan', { method: 'PUT', body: JSON.stringify({ date: data?.planDate, items: plan }) });
-    setSaved('✓ План на завтра сохранён');
+    setSaved('✓ План сохранён');
     load();
   }
   function addPlanRow() { setPlan((p) => [...p, { accountant: accountants[0] ?? '', planned_reports: 10, note: '' }]); }
@@ -152,14 +119,13 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
   return (
     <div className="card">
       <div className="report-head">
-        <h2>📑 Дневной отчёт аудитора</h2>
+        <h2>📑 Отчёт аудитора</h2>
         <input type="date" value={date} onChange={(e) => onDate(e.target.value)} />
         <button onClick={onSend}>Отправить в Telegram</button>
       </div>
 
-      <h3>Отчёты за день — проверено / всего</h3>
       <table>
-        <thead><tr><th>Бухгалтер</th><th>Проверено</th><th>Всего отчётов</th><th>Ср. оценка</th></tr></thead>
+        <thead><tr><th>Бухгалтер</th><th>Проверено</th><th>Всего</th><th>Ср. оценка</th></tr></thead>
         <tbody>
           {(data?.reports ?? []).map((r) => (
             <tr key={r.accountant}>
@@ -181,7 +147,7 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
         <h3 style={{ margin: 0 }}>План на завтра{data ? ` — ${data.planDate}` : ''}</h3>
         <button type="button" className="btn-soft" onClick={addPlanRow}>+ Бухгалтер</button>
       </div>
-      {plan.length === 0 && <p className="muted small">План не задан. Добавьте бухгалтеров и количество отчётов.</p>}
+      {plan.length === 0 && <p className="muted small">План не задан.</p>}
       {plan.map((r, i) => (
         <div className="plan-row" key={i}>
           <select value={r.accountant} onChange={(e) => updatePlan(i, { accountant: e.target.value })}>

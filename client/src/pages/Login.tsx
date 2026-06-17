@@ -26,7 +26,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="login-wrap">
       <form className="card login" onSubmit={submit}>
-        <h1>Sona QA</h1>
+        <h1>Контроль качества</h1>
         <p className="muted">Проверка качества бухгалтерских услуг</p>
         <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoFocus /></label>
         <label>Пароль<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" /></label>
