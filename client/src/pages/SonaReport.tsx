@@ -100,7 +100,6 @@ export function SonaReport() {
       </div>
 
       {sendMsg && <div className={sendMsg.startsWith('✓') ? 'success' : 'muted'}>{sendMsg}</div>}
-      <p className="muted small">TODO: финальную структуру/метрики отчёта согласовать с образцом Лилит.</p>
     </div>
   );
 }

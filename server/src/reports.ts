@@ -1,9 +1,8 @@
 import { supabase } from './supabase.js';
 
-// NOTE (TODO): The exact metrics/structure of the final report must mirror the
-// sample Sona already sends (to be provided by Lilit). The functions below are a
-// baseline built on the sqa_* views; adjust column selection / formatting once the
-// reference report is available.
+// Report builders over the sqa_* views. The auditor report mirrors the format
+// Sona already sends ("проверено/всего" per accountant + plan for the next day);
+// the daily/weekly reports are supplementary summaries for the team.
 
 export interface FinanceTotals { income: number; expense: number }
 
