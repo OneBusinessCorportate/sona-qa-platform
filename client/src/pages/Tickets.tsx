@@ -25,6 +25,12 @@ export function Tickets() {
     load();
   }
 
+  async function remove(id: string) {
+    if (!confirm('Удалить тикет?')) return;
+    await api(`/tickets/${id}`, { method: 'DELETE' });
+    load();
+  }
+
   return (
     <div className="card">
       <div className="report-head">
@@ -36,7 +42,7 @@ export function Tickets() {
         </select>
       </div>
       <table>
-        <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Приоритет</th><th>Срочно</th><th>Описание</th><th>Статус</th></tr></thead>
+        <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Приоритет</th><th>Срочно</th><th>Описание</th><th>Статус</th><th></th></tr></thead>
         <tbody>
           {tickets.map((t) => (
             <tr key={t.id} className={t.urgent ? 'urgent-row' : ''}>
@@ -50,9 +56,10 @@ export function Tickets() {
                   {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                 </select>
               </td>
+              <td><button type="button" className="btn-icon" title="Удалить" onClick={() => remove(t.id)}>✕</button></td>
             </tr>
           ))}
-          {tickets.length === 0 && <tr><td colSpan={6} className="muted">Тикетов нет</td></tr>}
+          {tickets.length === 0 && <tr><td colSpan={7} className="muted">Тикетов нет</td></tr>}
         </tbody>
       </table>
     </div>

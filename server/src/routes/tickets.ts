@@ -33,3 +33,9 @@ ticketsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ticket: data });
 });
+
+ticketsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
+  const { error } = await supabase.from('sqa_tickets').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
