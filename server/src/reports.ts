@@ -33,7 +33,7 @@ export interface DailyReport {
 
 // Group the income/expense lines Sona logs into a per-company breakdown
 // (which company, which section, how much income vs expense) — points 6 & 7.
-function financeByCompany(
+export function financeByCompany(
   rows: Array<{ company_agr_no?: string; accountant?: string | null; financials?: any }> | null | undefined,
   names: Map<string, string>,
 ): CompanyFinance[] {
@@ -57,7 +57,7 @@ function financeByCompany(
   return [...byCo.values()].sort((a, b) => b.expense + b.income - (a.expense + a.income));
 }
 
-const sumFinance = (cos: CompanyFinance[]): FinanceTotals =>
+export const sumFinance = (cos: CompanyFinance[]): FinanceTotals =>
   cos.reduce<FinanceTotals>((t, c) => ({ income: t.income + c.income, expense: t.expense + c.expense }), { income: 0, expense: 0 });
 
 export async function buildDailyReport(date: string): Promise<DailyReport> {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "SUPABASE_URL=http://localhost SUPABASE_SERVICE_KEY=test node --import tsx --test src/efficiency.test.ts src/reports.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

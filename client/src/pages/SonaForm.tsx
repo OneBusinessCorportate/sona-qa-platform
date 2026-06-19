@@ -39,6 +39,7 @@ const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 4
 // Income/expense lines Sona logs per company (which amount, which section).
 type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; note: string };
 const fmtAmount = (n: number) => n.toLocaleString('ru-RU');
+const today = () => new Date().toISOString().slice(0, 10);
 
 export function SonaForm() {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -46,6 +47,7 @@ export function SonaForm() {
   const [accountant, setAccountant] = useState('');
   const [manager, setManager] = useState('');
 
+  const [checkingDate, setCheckingDate] = useState(today());
   const [reportType, setReportType] = useState('vat');
   const [riskLevel, setRiskLevel] = useState('medium');
   const [period, setPeriod] = useState('');
@@ -96,6 +98,7 @@ export function SonaForm() {
     setReportType('vat'); setRiskLevel('medium'); setPeriod('');
     setChecklist(defaultChecklist()); setOverdueDays(''); setFinancials([]); setComment('');
     setIsProblem(false); setUrgent(false);
+    // Keep checkingDate as-is so Sona can log several reviews for the same day.
   }
 
   async function submit(e: React.FormEvent) {
@@ -108,6 +111,7 @@ export function SonaForm() {
         body: JSON.stringify({
           company_agr_no: agrNo,
           accountant, manager,
+          checking_date: checkingDate || undefined,
           report_type: reportType,
           risk_level: riskLevel,
           period: period || null,
@@ -167,9 +171,14 @@ export function SonaForm() {
             </div>
           </div>
         </div>
-        <label style={{ marginTop: 12 }}>Период (необязательно)
-          <input placeholder="напр. 05.2026 / 2-й кв." value={period} onChange={(e) => setPeriod(e.target.value)} />
-        </label>
+        <div className="two-col" style={{ marginTop: 12 }}>
+          <label>Дата проверки
+            <input type="date" value={checkingDate} onChange={(e) => setCheckingDate(e.target.value)} />
+          </label>
+          <label>Период (необязательно)
+            <input placeholder="напр. 05.2026 / 2-й кв." value={period} onChange={(e) => setPeriod(e.target.value)} />
+          </label>
+        </div>
       </div>
 
       <div className="card">

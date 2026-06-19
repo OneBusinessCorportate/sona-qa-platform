@@ -9,7 +9,8 @@
     "dev": "concurrently -n server,client -c green,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
     "start": "npm --prefix server start",
     "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
-    "check": "npm run typecheck && npm --prefix client run build"
+    "test": "npm --prefix server test",
+    "check": "npm run typecheck && npm test && npm --prefix client run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

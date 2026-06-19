@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, type Company } from '../api';
+
+const REPORT_LABEL: Record<string, string> = { vat: 'НДС', turnover: 'Оборот', other: 'Другое' };
+
+interface ReviewRow {
+  id: string; company_agr_no: string; accountant: string | null; report_type: string | null;
+  efficiency_pct: number | null; record_type: string | null; period: string | null; comment: string | null;
+}
 
 interface CompanyFinance {
   agr_no: string; name: string; accountant: string | null; income: number; expense: number;
@@ -102,7 +109,54 @@ export function SonaReport() {
         </div>
       )}
 
+      <ReviewsToday date={date} />
+
       {sendMsg && <div className={sendMsg.startsWith('✓') ? 'success' : 'muted'}>{sendMsg}</div>}
+    </div>
+  );
+}
+
+// Список проверок за день с возможностью удалить ошибочную запись.
+function ReviewsToday({ date }: { date: string }) {
+  const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+
+  async function load() {
+    const r = await api<{ reviews: ReviewRow[] }>(`/reviews?date=${date}`);
+    setRows(r.reviews);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
+  useEffect(() => {
+    api<{ companies: Company[] }>('/companies')
+      .then((r) => setNames(Object.fromEntries(r.companies.map((c) => [c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no]))))
+      .catch(() => {});
+  }, []);
+
+  async function remove(id: string) {
+    if (!confirm('Удалить проверку? Связанный тикет также будет удалён.')) return;
+    await api(`/reviews/${id}`, { method: 'DELETE' });
+    load();
+  }
+
+  return (
+    <div className="card">
+      <div className="report-head"><h2>Проверки за день</h2></div>
+      <table>
+        <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Отчёт</th><th>Оценка</th><th></th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>{names[r.company_agr_no] ?? r.company_agr_no}</td>
+              <td>{r.accountant ?? '—'}</td>
+              <td>{r.report_type ? (REPORT_LABEL[r.report_type] ?? r.report_type) : '—'}</td>
+              <td>{pct(r.efficiency_pct)}</td>
+              <td>{r.record_type === 'problem' ? <span className="pill p-high">проблема</span> : ''}</td>
+              <td><button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button></td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={6} className="muted">Проверок за день нет</td></tr>}
+        </tbody>
+      </table>
     </div>
   );
 }

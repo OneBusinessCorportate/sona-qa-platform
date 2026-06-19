@@ -90,3 +90,12 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
 
   res.status(201).json({ review, ticket: ticket ?? null });
 });
+
+// Delete a review (so Sona can correct a mistaken entry). There is no FK
+// cascade from sqa_tickets, so remove any auto-created ticket first.
+reviewsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
+  await supabase.from('sqa_tickets').delete().eq('review_id', req.params.id);
+  const { error } = await supabase.from('sqa_reviews').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
