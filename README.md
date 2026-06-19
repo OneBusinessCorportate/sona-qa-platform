@@ -54,9 +54,24 @@ UI намеренно минималистичный: только то, что 
 
 ```bash
 cp .env.example .env   # заполнить значения
-npm install            # ставит зависимости client и server
+npm install            # ставит зависимости корня
+npm run install:all    # ставит зависимости client и server
 npm run dev            # client (Vite) + server параллельно
 ```
+
+Версия Node — **20** (см. `.nvmrc` и `render.yaml`).
+
+### Проверки перед коммитом
+
+```bash
+npm run typecheck   # tsc --noEmit для server и client
+npm run check       # typecheck + сборка клиента (то же, что гоняет CI)
+```
+
+То же самое автоматически выполняет **GitHub Actions** (`.github/workflows/ci.yml`)
+на каждый push и PR в `main` — типизация обоих пакетов и сборка клиента.
+В сессиях **Claude Code on the web** зависимости ставит хук
+`.claude/hooks/session-start.sh`.
 
 ## Деплой на Render
 
