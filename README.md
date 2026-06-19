@@ -59,7 +59,8 @@ npm run install:all    # ставит зависимости client и server
 npm run dev            # client (Vite) + server параллельно
 ```
 
-Версия Node — **20** (см. `.nvmrc` и `render.yaml`).
+Версия Node — **22** (см. `.nvmrc` и `render.yaml`). Нужна Node ≥ 22:
+`@supabase/supabase-js` использует нативный WebSocket, которого нет в Node 20.
 
 ### Проверки перед коммитом
 

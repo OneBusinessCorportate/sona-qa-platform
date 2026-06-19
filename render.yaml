@@ -7,7 +7,7 @@ services:
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
-        value: "20"
+        value: "22"
       - key: TZ
         value: Asia/Yerevan
       - key: CRON_ENABLED
