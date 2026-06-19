@@ -36,6 +36,10 @@ function checklistScore(c: Checklist): number {
 }
 const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
 
+// Income/expense lines Sona logs per company (which amount, which section).
+type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; note: string };
+const fmtAmount = (n: number) => n.toLocaleString('ru-RU');
+
 export function SonaForm() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [agrNo, setAgrNo] = useState('');
@@ -47,6 +51,7 @@ export function SonaForm() {
   const [period, setPeriod] = useState('');
   const [checklist, setChecklist] = useState<Checklist>(defaultChecklist);
   const [overdueDays, setOverdueDays] = useState('');
+  const [financials, setFinancials] = useState<FinLine[]>([]);
   const [comment, setComment] = useState('');
   const [isProblem, setIsProblem] = useState(false);
   const [urgent, setUrgent] = useState(false);
@@ -73,9 +78,23 @@ export function SonaForm() {
     setChecklist((c) => ({ ...c, [id]: value }));
   }
 
+  // Income/expense line helpers.
+  const finTotals = useMemo(() => financials.reduce(
+    (t, f) => {
+      const a = Number(f.amount) || 0;
+      return f.kind === 'income' ? { ...t, income: t.income + a } : { ...t, expense: t.expense + a };
+    },
+    { income: 0, expense: 0 },
+  ), [financials]);
+  const addFin = (kind: 'income' | 'expense') =>
+    setFinancials((f) => [...f, { kind, section: '', amount: '', note: '' }]);
+  const updateFin = (i: number, patch: Partial<FinLine>) =>
+    setFinancials((f) => f.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const removeFin = (i: number) => setFinancials((f) => f.filter((_, idx) => idx !== i));
+
   function reset() {
     setReportType('vat'); setRiskLevel('medium'); setPeriod('');
-    setChecklist(defaultChecklist()); setOverdueDays(''); setComment('');
+    setChecklist(defaultChecklist()); setOverdueDays(''); setFinancials([]); setComment('');
     setIsProblem(false); setUrgent(false);
   }
 
@@ -98,6 +117,9 @@ export function SonaForm() {
             overdue_days: overdueDays ? Number(overdueDays) : null,
             score,
           },
+          financials: financials
+            .filter((f) => f.amount !== '' && Number(f.amount))
+            .map((f) => ({ kind: f.kind, section: f.section.trim(), amount: Number(f.amount) || 0, note: f.note.trim() || null })),
           record_type: isProblem ? 'problem' : 'other',
           comment: comment || null,
           ticket_priority: isProblem ? (urgent ? 'critical' : 'medium') : null,
@@ -174,6 +196,35 @@ export function SonaForm() {
                 value={overdueDays} onChange={(e) => setOverdueDays(e.target.value)} />
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <h2>Доходы и расходы</h2>
+          <span className="muted small">Доход {fmtAmount(finTotals.income)} · Расход {fmtAmount(finTotals.expense)}</span>
+        </div>
+        {financials.length === 0 && <p className="muted small">Необязательно: укажите суммы и раздел по компании.</p>}
+        {financials.map((f, i) => (
+          <div className="fin-row" key={i}>
+            <div className="type-pills">
+              <button type="button" className={`type-pill fin-income ${f.kind === 'income' ? 'active' : ''}`}
+                onClick={() => updateFin(i, { kind: 'income' })}>Доход</button>
+              <button type="button" className={`type-pill fin-expense ${f.kind === 'expense' ? 'active' : ''}`}
+                onClick={() => updateFin(i, { kind: 'expense' })}>Расход</button>
+            </div>
+            <input className="fin-section" placeholder="Раздел" value={f.section}
+              onChange={(e) => updateFin(i, { section: e.target.value })} />
+            <input className="fin-amount" inputMode="numeric" placeholder="Сумма" value={f.amount}
+              onChange={(e) => updateFin(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} />
+            <input className="fin-note" placeholder="Заметка" value={f.note}
+              onChange={(e) => updateFin(i, { note: e.target.value })} />
+            <button type="button" className="btn-icon" onClick={() => removeFin(i)}>✕</button>
+          </div>
+        ))}
+        <div className="fin-add">
+          <button type="button" className="btn-soft" onClick={() => addFin('income')}>+ Доход</button>
+          <button type="button" className="btn-soft" onClick={() => addFin('expense')}>+ Расход</button>
         </div>
       </div>
 

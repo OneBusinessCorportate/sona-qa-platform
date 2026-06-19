@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 
+interface CompanyFinance {
+  agr_no: string; name: string; accountant: string | null; income: number; expense: number;
+  lines: Array<{ kind: 'income' | 'expense'; section: string; amount: number; note: string | null }>;
+}
 interface Daily {
   date: string;
   totals: { reviews: number; companies: number; problems: number; praises: number; avgEfficiency: number | null };
   byAccountant: Array<{ accountant: string; reviews: number; avg_efficiency: number | null; problems: number }>;
+  finance: { income: number; expense: number };
+  financeByCompany: CompanyFinance[];
   openTickets: number; urgentTickets: number;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v}%`);
+const money = (v: number) => v.toLocaleString('ru-RU');
 
 export function SonaReport() {
   const [date, setDate] = useState(today());
@@ -65,6 +72,35 @@ export function SonaReport() {
           </>
         )}
       </div>
+
+      {daily && (daily.financeByCompany.length > 0 || daily.finance.income > 0 || daily.finance.expense > 0) && (
+        <div className="card">
+          <div className="report-head">
+            <h2>Доходы и расходы по компаниям</h2>
+          </div>
+          <div className="metrics">
+            <Metric label="Доход" value={money(daily.finance.income)} />
+            <Metric label="Расход" value={money(daily.finance.expense)} />
+            <Metric label="Сальдо" value={money(daily.finance.income - daily.finance.expense)} />
+          </div>
+          <table>
+            <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Раздел</th><th>Доход</th><th>Расход</th></tr></thead>
+            <tbody>
+              {daily.financeByCompany.flatMap((c) =>
+                c.lines.map((l, i) => (
+                  <tr key={c.agr_no + i}>
+                    <td>{i === 0 ? c.name : ''}</td>
+                    <td>{i === 0 ? (c.accountant ?? '—') : ''}</td>
+                    <td>{l.section}{l.note ? <span className="muted small"> · {l.note}</span> : null}</td>
+                    <td>{l.kind === 'income' ? money(l.amount) : ''}</td>
+                    <td>{l.kind === 'expense' ? money(l.amount) : ''}</td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {sendMsg && <div className={sendMsg.startsWith('✓') ? 'success' : 'muted'}>{sendMsg}</div>}
     </div>

@@ -53,3 +53,75 @@ export function computeScore(
   if (checklist && Object.keys(checklist).length) return checklistScore(checklist);
   return errorPenaltyScore(errors);
 }
+
+// ── Weighted scorecard ("Общая оценка" / Итог Q) ──────────────────────────
+//
+// Sona's "Общая оценка" sheet grades each accountant over a period on five
+// criteria (each 0–100) and weights them into a single Итог Q. Weights and the
+// scale come from her "Гайд" sheet:
+//   К1 ошибки/уровень   ×0.1   К2 сроки      ×0.3   К3 качество отчётности ×0.2
+//   К4 полнота докум.   ×0.3   К5 доработки  ×0.1
+// Per the chosen approach we DERIVE К1..К5 from the daily reviews she already
+// fills (one entry → auto scorecard), and let her override any value.
+
+export const SCORECARD_CRITERIA: Array<{ id: 'k1' | 'k2' | 'k3' | 'k4' | 'k5'; label: string; weight: number }> = [
+  { id: 'k1', label: 'Ошибки / уровень',        weight: 0.1 },
+  { id: 'k2', label: 'Соблюдение сроков',       weight: 0.3 },
+  { id: 'k3', label: 'Качество отчётности',     weight: 0.2 },
+  { id: 'k4', label: 'Полнота документов',      weight: 0.3 },
+  { id: 'k5', label: 'Доработки после проверки', weight: 0.1 },
+];
+
+export interface Criteria { k1: number; k2: number; k3: number; k4: number; k5: number }
+
+// Map a single review's checklist (+ problem flag) to the five criteria, 0–100.
+// Mirrors the "1/3/5" scale of Sona's guide, expressed as 20/60/100 style bands.
+export function reviewToCriteria(review: {
+  scores?: { checklist?: Checklist | null } | null;
+  record_type?: string | null;
+}): Criteria {
+  const c = review.scores?.checklist ?? {};
+  const yes = (id: string) => c[id] === 'yes';
+
+  // К1 — ошибки: штрафы → критично (20); ошибки/камералка → некритично (60); иначе 100.
+  const k1 = yes('penalties') ? 20 : yes('errors') || yes('desk_audit') ? 60 : 100;
+  // К2 — сроки: просрочка → 40, иначе 100.
+  const k2 = yes('overdue') ? 40 : 100;
+  // К3 — качество отчётности: доля {корректность, формат}.
+  const k3 = [20, 60, 100][(yes('correct') ? 1 : 0) + (yes('format') ? 1 : 0)];
+  // К4 — полнота документов: доля {счета подписаны, первичка, стандарты}.
+  const k4good = (yes('signed') ? 1 : 0) + (yes('confirmed') ? 1 : 0) + (yes('standards') ? 1 : 0);
+  const k4 = Math.round(20 + k4good * (80 / 3));
+  // К5 — доработки: запись-«проблема» → требовались доработки (40), иначе 100.
+  const k5 = review.record_type === 'problem' ? 40 : 100;
+
+  return { k1, k2, k3, k4, k5 };
+}
+
+// Average a set of per-review criteria into one accountant's К1..К5.
+export function averageCriteria(list: Criteria[]): Criteria {
+  if (!list.length) return { k1: 0, k2: 0, k3: 0, k4: 0, k5: 0 };
+  const sum = list.reduce<Criteria>(
+    (a, c) => ({ k1: a.k1 + c.k1, k2: a.k2 + c.k2, k3: a.k3 + c.k3, k4: a.k4 + c.k4, k5: a.k5 + c.k5 }),
+    { k1: 0, k2: 0, k3: 0, k4: 0, k5: 0 },
+  );
+  const n = list.length;
+  return {
+    k1: Math.round(sum.k1 / n), k2: Math.round(sum.k2 / n), k3: Math.round(sum.k3 / n),
+    k4: Math.round(sum.k4 / n), k5: Math.round(sum.k5 / n),
+  };
+}
+
+// Weighted Итог Q (0–100, rounded) from the five criteria.
+export function itogQ(c: Criteria): number {
+  const q = SCORECARD_CRITERIA.reduce((s, k) => s + c[k.id] * k.weight, 0);
+  return Math.round(q);
+}
+
+// Action level for an Итог Q, from the guide's scale (1–5 bands × 20).
+export function scorecardLevel(q: number): string {
+  if (q >= 90) return 'Премирование, кадровый резерв';
+  if (q >= 70) return 'План развития по слабым зонам';
+  if (q >= 50) return 'План корректирующих мероприятий';
+  return 'Административные меры / доп. обучение';
+}

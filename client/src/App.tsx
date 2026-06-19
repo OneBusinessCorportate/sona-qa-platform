@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { SonaForm } from './pages/SonaForm';
 import { SonaReport } from './pages/SonaReport';
+import { Efficiency } from './pages/Efficiency';
 import { Tickets } from './pages/Tickets';
 
-type Tab = 'form' | 'report' | 'tickets';
+type Tab = 'form' | 'report' | 'efficiency' | 'tickets';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('form');
@@ -15,12 +16,14 @@ export function App() {
         <nav className="tabs">
           <button className={tab === 'form' ? 'active' : ''} onClick={() => setTab('form')}>Проверка</button>
           <button className={tab === 'report' ? 'active' : ''} onClick={() => setTab('report')}>Отчёты</button>
+          <button className={tab === 'efficiency' ? 'active' : ''} onClick={() => setTab('efficiency')}>Общая оценка</button>
           <button className={tab === 'tickets' ? 'active' : ''} onClick={() => setTab('tickets')}>Тикеты</button>
         </nav>
       </header>
       <main className="content">
         {tab === 'form' && <SonaForm />}
         {tab === 'report' && <SonaReport />}
+        {tab === 'efficiency' && <Efficiency />}
         {tab === 'tickets' && <Tickets />}
       </main>
     </div>

@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { supabase } from '../supabase.js';
-import { buildDailyReport, buildWeeklyReport, buildAuditorReport, formatDailyText, formatWeeklyText, formatAuditorText } from '../reports.js';
+import { buildDailyReport, buildWeeklyReport, buildAuditorReport, buildScorecard, formatDailyText, formatWeeklyText, formatAuditorText } from '../reports.js';
 import { sendReport } from '../telegram.js';
 import { isoWeekLabel, mondayOf, todayInTz } from '../time.js';
 
@@ -63,6 +63,38 @@ reportsRouter.put('/plan', async (req: AuthedRequest, res: Response) => {
     if (error) return res.status(500).json({ error: error.message });
   }
   res.json({ ok: true, count: rows.length });
+});
+
+// Weighted scorecard ("Общая оценка"): Итог Q per accountant over a range.
+// Defaults to the current month (1st → today) when from/to are omitted.
+const monthStart = (date: string) => `${date.slice(0, 7)}-01`;
+
+reportsRouter.get('/scorecard', async (req: AuthedRequest, res: Response) => {
+  const to = String(req.query.to ?? todayInTz());
+  const from = String(req.query.from ?? monthStart(to));
+  res.json(await buildScorecard(from, to));
+});
+
+// Save Sona's manual overrides for one accountant over a period. Each of
+// k1..k5 may be a number (override) or null (use the auto-derived value).
+reportsRouter.put('/scorecard/override', async (req: AuthedRequest, res: Response) => {
+  const { accountant, from, to } = req.body ?? {};
+  if (!accountant || !from || !to) return res.status(400).json({ error: 'accountant_from_to_required' });
+  const num = (v: any) => (v === null || v === undefined || v === '' ? null : Number(v));
+  const row = {
+    accountant, period_from: from, period_to: to,
+    k1: num(req.body.k1), k2: num(req.body.k2), k3: num(req.body.k3), k4: num(req.body.k4), k5: num(req.body.k5),
+    note: req.body.note ?? null, updated_at: new Date().toISOString(),
+  };
+  const allEmpty = [row.k1, row.k2, row.k3, row.k4, row.k5].every((v) => v === null) && !row.note;
+  if (allEmpty) {
+    await supabase.from('sqa_efficiency_overrides').delete().match({ accountant, period_from: from, period_to: to });
+    return res.json({ ok: true, cleared: true });
+  }
+  const { error } = await supabase
+    .from('sqa_efficiency_overrides').upsert(row, { onConflict: 'accountant,period_from,period_to' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 // Raw efficiency/accountant breakdowns for the dashboard.
