@@ -53,7 +53,29 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   // always trustworthy regardless of what the client sends.
   const efficiency_pct = computeScore(checklist, errors);
   const points = scoreBand(efficiency_pct);
-  const scores = { ...(b.scores ?? {}), points };
+
+  // Three review-stage comments (before handing feedback to the accountant /
+  // during the accountant's work / after it is finished). Kept structured in
+  // `scores.comments`; the top-level `comment` column gets a labelled join so
+  // the reviews list and reports still show readable text.
+  const cm = (b.comments ?? b.scores?.comments ?? null) as
+    | { before?: string | null; work?: string | null; after?: string | null }
+    | null;
+  const comments = cm
+    ? {
+        before: (cm.before ?? '').trim() || null,
+        work: (cm.work ?? '').trim() || null,
+        after: (cm.after ?? '').trim() || null,
+      }
+    : null;
+  const combinedComment = comments
+    ? [
+        comments.before && `До: ${comments.before}`,
+        comments.work && `Работа: ${comments.work}`,
+        comments.after && `После: ${comments.after}`,
+      ].filter(Boolean).join('\n') || null
+    : (b.comment ?? null);
+  const scores = { ...(b.scores ?? {}), points, ...(comments ? { comments } : {}) };
 
   const row = {
     company_agr_no: b.company_agr_no,
@@ -72,7 +94,7 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
     record_type: b.record_type ?? 'other',
     errors,
     praise: b.praise ?? null,
-    comment: b.comment ?? null,
+    comment: combinedComment,
     quality_band: b.quality_band ?? null,
     ticket_priority: b.ticket_priority ?? null,
     ticket_urgent: Boolean(b.ticket_urgent),

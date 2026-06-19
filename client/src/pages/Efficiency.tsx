@@ -6,8 +6,11 @@ import { api } from '../api';
 // переопределить любое значение (одно заполнение → отчёт формируется сам).
 
 interface Criteria { k1: number; k2: number; k3: number; k4: number; k5: number }
+interface PeriodMark { itogQ: number; pct: number | null; reviews: number; level: string }
 interface Row extends Criteria {
-  accountant: string; reviews: number; auto: Criteria; itogQ: number; level: string; overridden: boolean;
+  accountant: string; reviews: number; auto: Criteria; avgPct: number | null;
+  itogQ: number; level: string; overridden: boolean;
+  weekly: PeriodMark; daily: PeriodMark;
 }
 interface Scorecard { from: string; to: string; rows: Row[] }
 
@@ -22,6 +25,17 @@ const KEYS: Array<{ id: keyof Criteria; label: string; weight: string }> = [
 const monthStart = () => new Date().toISOString().slice(0, 8) + '01';
 const today = () => new Date().toISOString().slice(0, 10);
 const levelClass = (q: number) => (q >= 90 ? 'band-5' : q >= 70 ? 'band-4' : q >= 50 ? 'band-3' : 'band-2');
+const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v}%`);
+// A weekly/daily mark cell: Итог Q badge + the % behind it (— when no reviews).
+function MarkCell({ m }: { m: PeriodMark }) {
+  if (!m || m.reviews === 0) return <span className="muted">—</span>;
+  return (
+    <span className="mark-cell" title={`${m.reviews} пров. · ${m.level}`}>
+      <span className={`overall-badge ${levelClass(m.itogQ)}`}>{m.itogQ}</span>
+      <span className="muted small"> {pct(m.pct)}</span>
+    </span>
+  );
+}
 
 export function Efficiency() {
   const [from, setFrom] = useState(monthStart());
@@ -85,6 +99,8 @@ export function Efficiency() {
         <p className="muted small">
           Итог Q = 0.1·К1 + 0.3·К2 + 0.2·К3 + 0.3·К4 + 0.1·К5. Значения К1–К5 (0–100)
           считаются из проверок за период; их можно переопределить вручную.
+          «Оценка %» — средняя оценка из проверок (1-я страница). «Недельн.» и
+          «Дневн.» — Итог Q за последние 7 дней и за день «по».
         </p>
 
         <div className="scorecard-wrap">
@@ -93,8 +109,11 @@ export function Efficiency() {
               <tr>
                 <th>Бухгалтер</th>
                 <th>Пров.</th>
+                <th title="средняя оценка из проверок (1-я страница)">Оценка %</th>
                 {KEYS.map((k) => <th key={k.id} title={`вес ${k.weight}`}>{k.label}</th>)}
                 <th>Итог Q</th>
+                <th title="Итог Q за последние 7 дней">Недельн.</th>
+                <th title="Итог Q за день «по»">Дневн.</th>
                 <th>Уровень</th>
                 <th></th>
               </tr>
@@ -106,6 +125,7 @@ export function Efficiency() {
                   <tr key={r.accountant}>
                     <td>{r.accountant}{r.overridden && <span className="muted small" title="есть ручные правки"> ✎</span>}</td>
                     <td>{r.reviews}</td>
+                    <td>{pct(r.avgPct)}</td>
                     {KEYS.map((k) => {
                       const edited = cellValue(r, k.id) !== String(r.auto[k.id]);
                       return (
@@ -117,6 +137,8 @@ export function Efficiency() {
                       );
                     })}
                     <td><span className={`overall-badge ${levelClass(q)}`}>{q}</span></td>
+                    <td><MarkCell m={r.weekly} /></td>
+                    <td><MarkCell m={r.daily} /></td>
                     <td className="small">{r.level}</td>
                     <td>
                       {dirty.has(r.accountant) && <button className="btn-soft" onClick={() => save(r)}>Сохранить</button>}
@@ -124,7 +146,7 @@ export function Efficiency() {
                   </tr>
                 );
               })}
-              {data && data.rows.length === 0 && <tr><td colSpan={10} className="muted">Нет проверок за период</td></tr>}
+              {data && data.rows.length === 0 && <tr><td colSpan={13} className="muted">Нет проверок за период</td></tr>}
             </tbody>
           </table>
         </div>

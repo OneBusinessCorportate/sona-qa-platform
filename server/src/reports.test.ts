@@ -3,11 +3,39 @@ import assert from 'node:assert/strict';
 import {
   financeByCompany, sumFinance,
   buildScorecard, // not called (needs DB), only imported to ensure it stays exported
+  avgPct, markOf,
   formatAuditorText, formatDailyText,
   type DailyReport, type AuditorReport,
 } from './reports.js';
 
 void buildScorecard;
+
+const perfect = {
+  overdue: 'no', signed: 'yes', correct: 'yes', confirmed: 'yes', format: 'yes',
+  errors: 'no', desk_audit: 'no', penalties: 'no', standards: 'yes',
+};
+
+test('avgPct: averages stored percentages, ignores missing', () => {
+  assert.equal(avgPct([{ efficiency_pct: 100 }, { efficiency_pct: 80 }]), 90);
+  assert.equal(avgPct([{ efficiency_pct: 88.89 }, { efficiency_pct: null }]), 88.89);
+  assert.equal(avgPct([]), null);
+  assert.equal(avgPct([{ efficiency_pct: null }]), null);
+});
+
+test('markOf: empty window → Итог Q 0, pct null, 0 reviews', () => {
+  assert.deepEqual(markOf([]), { itogQ: 0, pct: null, reviews: 0, level: markOf([]).level });
+});
+
+test('markOf: derives Итог Q + avg % from the window', () => {
+  const m = markOf([
+    { scores: { checklist: perfect }, record_type: 'other', efficiency_pct: 100 },
+    { scores: { checklist: perfect }, record_type: 'other', efficiency_pct: 100 },
+  ]);
+  assert.equal(m.itogQ, 100);
+  assert.equal(m.pct, 100);
+  assert.equal(m.reviews, 2);
+  assert.equal(m.level, 'Премирование, кадровый резерв');
+});
 
 const names = new Map([['100', 'ООО Ромашка'], ['200', 'ИП Иванов']]);
 

@@ -35,6 +35,17 @@ function checklistScore(c: Checklist): number {
   return Math.round((good / CHECKLIST.length) * 10000) / 100;
 }
 const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
+// Баллы: Sona's 0–20 banding of the percentage (mirror of server/src/efficiency.ts scoreBand).
+const scoreBand = (pct: number) => (pct >= 95 ? 20 : pct >= 75 ? 15 : pct >= 60 ? 10 : pct >= 40 ? 5 : 0);
+
+// Three review-stage comments mirrored on the server (scores.comments).
+const COMMENT_FIELDS: Array<{ id: 'before' | 'work' | 'after'; label: string; placeholder: string }> = [
+  { id: 'before', label: 'Комментарий до передачи бухгалтеру', placeholder: 'Что замечено до передачи бухгалтеру' },
+  { id: 'work',   label: 'Комментарий по работе бухгалтера',   placeholder: 'Замечания по работе бухгалтера' },
+  { id: 'after',  label: 'Комментарий после завершения',        placeholder: 'Итог после того, как бухгалтер завершил' },
+];
+type Comments = { before: string; work: string; after: string };
+const emptyComments = (): Comments => ({ before: '', work: '', after: '' });
 
 // Income/expense lines Sona logs per company (which amount, which section).
 type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; note: string };
@@ -54,7 +65,7 @@ export function SonaForm() {
   const [checklist, setChecklist] = useState<Checklist>(defaultChecklist);
   const [overdueDays, setOverdueDays] = useState('');
   const [financials, setFinancials] = useState<FinLine[]>([]);
-  const [comment, setComment] = useState('');
+  const [comments, setComments] = useState<Comments>(emptyComments);
   const [isProblem, setIsProblem] = useState(false);
   const [urgent, setUrgent] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -73,8 +84,9 @@ export function SonaForm() {
     }
   }, [selected]);
 
-  // Оценка % — computed live from the 9-point checklist.
+  // Оценка % — computed live from the 9-point checklist; Баллы — its 0–20 band.
   const score = checklistScore(checklist);
+  const points = scoreBand(score);
 
   function setCheck(id: string, value: 'yes' | 'no') {
     setChecklist((c) => ({ ...c, [id]: value }));
@@ -96,7 +108,7 @@ export function SonaForm() {
 
   function reset() {
     setReportType('vat'); setRiskLevel('medium'); setPeriod('');
-    setChecklist(defaultChecklist()); setOverdueDays(''); setFinancials([]); setComment('');
+    setChecklist(defaultChecklist()); setOverdueDays(''); setFinancials([]); setComments(emptyComments());
     setIsProblem(false); setUrgent(false);
     // Keep checkingDate as-is so Sona can log several reviews for the same day.
   }
@@ -120,12 +132,13 @@ export function SonaForm() {
             checklist,
             overdue_days: overdueDays ? Number(overdueDays) : null,
             score,
+            points,
           },
+          comments,
           financials: financials
             .filter((f) => f.amount !== '' && Number(f.amount))
             .map((f) => ({ kind: f.kind, section: f.section.trim(), amount: Number(f.amount) || 0, note: f.note.trim() || null })),
           record_type: isProblem ? 'problem' : 'other',
-          comment: comment || null,
           ticket_priority: isProblem ? (urgent ? 'critical' : 'medium') : null,
           ticket_urgent: isProblem ? urgent : false,
         }),
@@ -184,7 +197,10 @@ export function SonaForm() {
       <div className="card">
         <div className="card-title">
           <h2>Чек-лист</h2>
-          <span className={`overall-badge band-${effBand(score)}`}>Оценка: {score}%</span>
+          <span style={{ display: 'inline-flex', gap: 8 }}>
+            <span className={`overall-badge band-${effBand(score)}`}>Оценка: {score}%</span>
+            <span className={`overall-badge band-${effBand(score)}`}>Баллы: {points}</span>
+          </span>
         </div>
         <div className="checklist">
           {CHECKLIST.map((c) => (
@@ -238,9 +254,17 @@ export function SonaForm() {
       </div>
 
       <div className="card">
-        <label>Комментарий (необязательно)
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Что не так / что отметить" />
-        </label>
+        <div className="card-title">
+          <h2>Комментарии</h2>
+          {selected && <span className="muted small">Бухгалтер: <b>{accountant || '—'}</b></span>}
+        </div>
+        {COMMENT_FIELDS.map((f) => (
+          <label key={f.id} style={{ marginTop: f.id === 'before' ? 0 : 12, display: 'block' }}>
+            {f.label}
+            <textarea value={comments[f.id]} rows={2} placeholder={f.placeholder}
+              onChange={(e) => setComments((c) => ({ ...c, [f.id]: e.target.value }))} />
+          </label>
+        ))}
         <label className="urgent-toggle" style={{ marginTop: 12 }}>
           <input type="checkbox" checked={isProblem} onChange={(e) => setIsProblem(e.target.checked)} />
           <span>Проблема — создать тикет</span>

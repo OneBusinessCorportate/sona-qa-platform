@@ -100,38 +100,85 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
 }
 
 // ── Weighted scorecard ("Общая оценка") over a date range ─────────────────
+
+// A weighted mark over some window: Итог Q + the average Оценка % behind it.
+export interface PeriodMark { itogQ: number; pct: number | null; reviews: number; level: string }
+
 export interface ScorecardRow extends Criteria {
   accountant: string;
   reviews: number;
   auto: Criteria; // auto-derived baseline (before overrides), for the UI
+  avgPct: number | null; // средняя Оценка % за период (из проверок на 1-й странице)
   itogQ: number;
   level: string;
   overridden: boolean;
+  weekly: PeriodMark; // недельная оценка (последние 7 дней по `to`)
+  daily: PeriodMark; // дневная оценка (за день `to`)
 }
 export interface Scorecard { from: string; to: string; rows: ScorecardRow[] }
 
+// One stored review as far as the scorecard cares about it.
+interface ScorecardReview {
+  accountant?: string | null;
+  record_type?: string | null;
+  scores?: { checklist?: any } | null;
+  checking_date?: string | null;
+  efficiency_pct?: number | null;
+}
+
+const addDays = (date: string, n: number) => {
+  const d = new Date(date + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const inRange = (d: string | null | undefined, a: string, b: string) => !!d && d >= a && d <= b;
+
+// Average Оценка % over a set of reviews (the % computed on the 1st page),
+// ignoring reviews that have no stored percentage. Null when none qualify.
+export function avgPct(list: ScorecardReview[]): number | null {
+  const nums = list.map((r) => r.efficiency_pct).filter((v): v is number => typeof v === 'number');
+  if (!nums.length) return null;
+  return Math.round((nums.reduce((s, v) => s + v, 0) / nums.length) * 100) / 100;
+}
+
+// Weighted mark (Итог Q) + average % for a window of reviews, auto-derived.
+export function markOf(list: ScorecardReview[]): PeriodMark {
+  const q = itogQ(averageCriteria(list.map((r) => reviewToCriteria(r as any))));
+  return { itogQ: q, pct: avgPct(list), reviews: list.length, level: scorecardLevel(q) };
+}
+
 export async function buildScorecard(from: string, to: string): Promise<Scorecard> {
+  // Fetch a superset wide enough to also cover the trailing week, so weekly and
+  // daily marks can be derived alongside the period scorecard in one query.
+  const weekStart = addDays(to, -6);
+  const rangeStart = from < weekStart ? from : weekStart;
   const { data: reviews } = await supabase
     .from('sqa_reviews')
-    .select('accountant, record_type, scores')
-    .gte('checking_date', from)
+    .select('accountant, record_type, scores, checking_date, efficiency_pct')
+    .gte('checking_date', rangeStart)
     .lte('checking_date', to);
 
-  // Group reviews per accountant and derive average К1..К5.
-  const groups = new Map<string, Criteria[]>();
-  for (const r of reviews ?? []) {
+  // Group the period reviews ([from..to]) per accountant for К1..К5; keep the
+  // full fetched set per accountant for the weekly/daily marks.
+  const period = new Map<string, ScorecardReview[]>();
+  const all = new Map<string, ScorecardReview[]>();
+  for (const r of (reviews ?? []) as ScorecardReview[]) {
     const name = r.accountant?.trim();
     if (!name) continue;
-    if (!groups.has(name)) groups.set(name, []);
-    groups.get(name)!.push(reviewToCriteria(r as any));
+    if (!all.has(name)) all.set(name, []);
+    all.get(name)!.push(r);
+    if (inRange(r.checking_date, from, to)) {
+      if (!period.has(name)) period.set(name, []);
+      period.get(name)!.push(r);
+    }
   }
 
   const { data: overrides } = await supabase
     .from('sqa_efficiency_overrides').select('*').eq('period_from', from).eq('period_to', to);
   const ovMap = new Map((overrides ?? []).map((o) => [o.accountant, o]));
 
-  const rows: ScorecardRow[] = [...groups.entries()].map(([accountant, list]) => {
-    const auto = averageCriteria(list);
+  const rows: ScorecardRow[] = [...period.entries()].map(([accountant, list]) => {
+    const auto = averageCriteria(list.map((r) => reviewToCriteria(r as any)));
     const ov = ovMap.get(accountant);
     // Any non-null override value replaces the derived one.
     const merged: Criteria = {
@@ -139,10 +186,14 @@ export async function buildScorecard(from: string, to: string): Promise<Scorecar
       k4: ov?.k4 ?? auto.k4, k5: ov?.k5 ?? auto.k5,
     };
     const q = itogQ(merged);
+    const owned = all.get(accountant) ?? [];
     return {
       accountant, reviews: list.length, ...merged, auto,
+      avgPct: avgPct(list),
       itogQ: q, level: scorecardLevel(q),
       overridden: Boolean(ov && [ov.k1, ov.k2, ov.k3, ov.k4, ov.k5].some((v) => v !== null && v !== undefined)),
+      weekly: markOf(owned.filter((r) => inRange(r.checking_date, weekStart, to))),
+      daily: markOf(owned.filter((r) => r.checking_date === to)),
     };
   });
 
