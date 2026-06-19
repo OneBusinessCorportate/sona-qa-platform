@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { computeScore, scoreBand } from '../efficiency.js';
+import { normalizeComments, combineComments } from '../comments.js';
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -58,23 +59,8 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   // during the accountant's work / after it is finished). Kept structured in
   // `scores.comments`; the top-level `comment` column gets a labelled join so
   // the reviews list and reports still show readable text.
-  const cm = (b.comments ?? b.scores?.comments ?? null) as
-    | { before?: string | null; work?: string | null; after?: string | null }
-    | null;
-  const comments = cm
-    ? {
-        before: (cm.before ?? '').trim() || null,
-        work: (cm.work ?? '').trim() || null,
-        after: (cm.after ?? '').trim() || null,
-      }
-    : null;
-  const combinedComment = comments
-    ? [
-        comments.before && `До: ${comments.before}`,
-        comments.work && `Работа: ${comments.work}`,
-        comments.after && `После: ${comments.after}`,
-      ].filter(Boolean).join('\n') || null
-    : (b.comment ?? null);
+  const comments = normalizeComments(b.comments ?? b.scores?.comments ?? null);
+  const combinedComment = comments ? combineComments(comments) : (b.comment ?? null);
   const scores = { ...(b.scores ?? {}), points, ...(comments ? { comments } : {}) };
 
   const row = {

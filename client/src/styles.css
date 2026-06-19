@@ -140,6 +140,7 @@ textarea { resize: vertical; }
 .k-input { width: 56px; padding: 5px 6px; text-align: center; }
 .k-input.k-edited { border-color: var(--primary); background: #eff4ff; font-weight: 700; }
 .mark-cell { display: inline-flex; align-items: center; gap: 4px; }
+.review-comment-row td { white-space: pre-line; padding-top: 0; border-top: 0; }
 
 /* Type / risk pills */
 .type-pills { display: flex; gap: 10px; flex-wrap: wrap; }

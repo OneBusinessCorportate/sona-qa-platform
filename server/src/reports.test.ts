@@ -23,7 +23,9 @@ test('avgPct: averages stored percentages, ignores missing', () => {
 });
 
 test('markOf: empty window → Итог Q 0, pct null, 0 reviews', () => {
-  assert.deepEqual(markOf([]), { itogQ: 0, pct: null, reviews: 0, level: markOf([]).level });
+  assert.deepEqual(markOf([]), {
+    itogQ: 0, pct: null, reviews: 0, level: 'Административные меры / доп. обучение',
+  });
 });
 
 test('markOf: derives Итог Q + avg % from the window', () => {

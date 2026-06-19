@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api, type Company } from '../api';
 
 const REPORT_LABEL: Record<string, string> = { vat: 'НДС', turnover: 'Оборот', other: 'Другое' };
@@ -145,14 +145,21 @@ function ReviewsToday({ date }: { date: string }) {
         <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Отчёт</th><th>Оценка</th><th></th><th></th></tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
-              <td>{names[r.company_agr_no] ?? r.company_agr_no}</td>
-              <td>{r.accountant ?? '—'}</td>
-              <td>{r.report_type ? (REPORT_LABEL[r.report_type] ?? r.report_type) : '—'}</td>
-              <td>{pct(r.efficiency_pct)}</td>
-              <td>{r.record_type === 'problem' ? <span className="pill p-high">проблема</span> : ''}</td>
-              <td><button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button></td>
-            </tr>
+            <Fragment key={r.id}>
+              <tr>
+                <td>{names[r.company_agr_no] ?? r.company_agr_no}</td>
+                <td>{r.accountant ?? '—'}</td>
+                <td>{r.report_type ? (REPORT_LABEL[r.report_type] ?? r.report_type) : '—'}</td>
+                <td>{pct(r.efficiency_pct)}</td>
+                <td>{r.record_type === 'problem' ? <span className="pill p-high">проблема</span> : ''}</td>
+                <td><button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button></td>
+              </tr>
+              {r.comment && (
+                <tr className="review-comment-row">
+                  <td colSpan={6} className="muted small">{r.comment}</td>
+                </tr>
+              )}
+            </Fragment>
           ))}
           {rows.length === 0 && <tr><td colSpan={6} className="muted">Проверок за день нет</td></tr>}
         </tbody>
