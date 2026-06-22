@@ -47,6 +47,18 @@ const COMMENT_FIELDS: Array<{ id: 'before' | 'work' | 'after'; label: string; pl
 type Comments = { before: string; work: string; after: string };
 const emptyComments = (): Comments => ({ before: '', work: '', after: '' });
 
+// Ticket decision — a single, deliberate choice instead of a small checkbox
+// that is easy to miss. Sona must pick one before saving.
+// - 'ticket_urgent': оценка не 100% → тикет бухгалтеру с тегом СРОЧНО
+// - 'ticket':        оценка не 100% → тикет бухгалтеру
+// - 'none':          оценка 100%   → тикет не создаётся
+type TicketDecision = '' | 'ticket_urgent' | 'ticket' | 'none';
+const TICKET_DECISIONS: Array<{ value: Exclude<TicketDecision, ''>; label: string }> = [
+  { value: 'ticket_urgent', label: 'Оценка НЕ 100% → создать тикет у бухгалтера с тегом 🔴 СРОЧНО' },
+  { value: 'ticket',        label: 'Оценка НЕ 100% → создать тикет у бухгалтера' },
+  { value: 'none',          label: 'Оценка 100% → НЕ создавать тикет у бухгалтера' },
+];
+
 // Income/expense lines Sona logs per company (which amount, which section).
 type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; note: string };
 const fmtAmount = (n: number) => n.toLocaleString('ru-RU');
@@ -66,8 +78,7 @@ export function SonaForm() {
   const [overdueDays, setOverdueDays] = useState('');
   const [financials, setFinancials] = useState<FinLine[]>([]);
   const [comments, setComments] = useState<Comments>(emptyComments);
-  const [isProblem, setIsProblem] = useState(false);
-  const [urgent, setUrgent] = useState(false);
+  const [ticketDecision, setTicketDecision] = useState<TicketDecision>('');
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -109,13 +120,16 @@ export function SonaForm() {
   function reset() {
     setReportType('vat'); setRiskLevel('medium'); setPeriod('');
     setChecklist(defaultChecklist()); setOverdueDays(''); setFinancials([]); setComments(emptyComments());
-    setIsProblem(false); setUrgent(false);
+    setTicketDecision('');
     // Keep checkingDate as-is so Sona can log several reviews for the same day.
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!agrNo) { setMsg({ kind: 'err', text: 'Выберите компанию' }); return; }
+    if (!ticketDecision) { setMsg({ kind: 'err', text: 'Выберите решение по тикету' }); return; }
+    const isProblem = ticketDecision !== 'none';
+    const urgent = ticketDecision === 'ticket_urgent';
     setBusy(true); setMsg(null);
     try {
       const res = await api<{ review: any; ticket: any }>('/reviews', {
@@ -265,16 +279,20 @@ export function SonaForm() {
               onChange={(e) => setComments((c) => ({ ...c, [f.id]: e.target.value }))} />
           </label>
         ))}
-        <label className="urgent-toggle" style={{ marginTop: 12 }}>
-          <input type="checkbox" checked={isProblem} onChange={(e) => setIsProblem(e.target.checked)} />
-          <span>Проблема — создать тикет</span>
+        <label style={{ marginTop: 16, display: 'block' }}>
+          Решение по тикету<span className="req"> *</span>
+          <select
+            className={`ticket-decision${ticketDecision === '' ? ' unset' : ''}`}
+            value={ticketDecision}
+            onChange={(e) => setTicketDecision(e.target.value as TicketDecision)}
+            required
+          >
+            <option value="" disabled>— выберите решение —</option>
+            {TICKET_DECISIONS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
         </label>
-        {isProblem && (
-          <label className="urgent-toggle" style={{ marginTop: 8 }}>
-            <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} />
-            <span>🔴 Срочно</span>
-          </label>
-        )}
       </div>
 
       <div className="submit-bar">

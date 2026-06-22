@@ -150,6 +150,12 @@ textarea { resize: vertical; }
 .urgent-toggle { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); font-weight: 500; }
 .urgent-toggle input { width: auto; }
 
+/* Ticket decision — required dropdown (replaces the easy-to-miss checkbox) */
+.req { color: var(--danger); font-weight: 700; }
+.ticket-decision { font-size: 14px; font-weight: 500; }
+.ticket-decision.unset { border-color: var(--danger); color: var(--muted); background: #fef2f2; }
+.ticket-decision.unset:focus { box-shadow: 0 0 0 3px rgba(220,38,38,.12); }
+
 /* Submit */
 .submit-bar { display: flex; align-items: center; gap: 16px; justify-content: flex-end; position: sticky; bottom: 0; padding: 14px 0; }
 .btn-primary-lg { background: var(--primary); color: #fff; border: none; padding: 13px 28px; border-radius: 11px; cursor: pointer; font-size: 15px; font-weight: 600; box-shadow: 0 6px 18px rgba(37,99,235,.28); }
