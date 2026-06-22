@@ -315,14 +315,14 @@ function CompanySelect({ companies, value, onChange }: { companies: Company[]; v
   }, []);
 
   const q = query.trim().toLowerCase();
-  const filtered = (q
+  // Show the full company list (the dropdown scrolls); search narrows it.
+  const filtered = q
     ? companies.filter((c) =>
         (c.name_agr ?? '').toLowerCase().includes(q) ||
         (c.name_tax ?? '').toLowerCase().includes(q) ||
-        c.agr_no.includes(q) ||
+        c.agr_no.toLowerCase().includes(q) ||
         (c.accountant ?? '').toLowerCase().includes(q))
-    : companies
-  ).slice(0, 60);
+    : companies;
 
   return (
     <div className="combobox" ref={ref}>

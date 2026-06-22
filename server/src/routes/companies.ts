@@ -11,7 +11,8 @@ companiesRouter.get('/', async (req: AuthedRequest, res: Response) => {
   let q = supabase
     .from('mqa_chats')
     .select('agr_no, name_agr, name_tax, hvhh, accountant, manager, status')
-    .order('name_agr', { ascending: true });
+    .order('name_agr', { ascending: true })
+    .limit(5000); // explicit cap so the full list is returned (Supabase default is 1000)
   if (activeOnly) q = q.eq('status', 'Active');
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
