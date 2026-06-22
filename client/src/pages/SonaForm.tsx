@@ -198,14 +198,6 @@ export function SonaForm() {
             </div>
           </div>
         </div>
-        <div className="two-col" style={{ marginTop: 12 }}>
-          <label>Дата проверки
-            <input type="date" value={checkingDate} onChange={(e) => setCheckingDate(e.target.value)} />
-          </label>
-          <label>Период (необязательно)
-            <input placeholder="напр. 05.2026 / 2-й кв." value={period} onChange={(e) => setPeriod(e.target.value)} />
-          </label>
-        </div>
       </div>
 
       <div className="card">
@@ -216,6 +208,9 @@ export function SonaForm() {
             <span className={`overall-badge band-${effBand(score)}`}>Баллы: {points}</span>
           </span>
         </div>
+        <label style={{ marginBottom: 14 }}>Дата проверки
+          <input type="date" value={checkingDate} onChange={(e) => setCheckingDate(e.target.value)} />
+        </label>
         <div className="checklist">
           {CHECKLIST.map((c) => (
             <div className="check-row" key={c.id}>
@@ -236,6 +231,10 @@ export function SonaForm() {
             </div>
           )}
         </div>
+        <label style={{ marginTop: 14 }}>Отчётный период (необязательно)
+          <input placeholder="напр. 05.2026 / 2-й кв. / Апрель" value={period}
+            onChange={(e) => setPeriod(e.target.value)} />
+        </label>
       </div>
 
       <div className="card">
