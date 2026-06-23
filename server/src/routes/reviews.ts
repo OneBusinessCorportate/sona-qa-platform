@@ -34,6 +34,7 @@ reviewsRouter.get('/', async (req: AuthedRequest, res: Response) => {
 reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   const b = req.body ?? {};
   if (!b.company_agr_no) return res.status(400).json({ error: 'company_agr_no_required' });
+  if (!b.period || !String(b.period).trim()) return res.status(400).json({ error: 'period_required' });
 
   let accountant = b.accountant ?? null;
   let manager = b.manager ?? null;

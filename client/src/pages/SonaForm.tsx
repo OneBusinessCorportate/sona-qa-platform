@@ -127,6 +127,7 @@ export function SonaForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!agrNo) { setMsg({ kind: 'err', text: 'Выберите компанию' }); return; }
+    if (!period.trim()) { setMsg({ kind: 'err', text: 'Укажите отчётный период' }); return; }
     if (!ticketDecision) { setMsg({ kind: 'err', text: 'Выберите решение по тикету' }); return; }
     const isProblem = ticketDecision !== 'none';
     const urgent = ticketDecision === 'ticket_urgent';
@@ -140,7 +141,7 @@ export function SonaForm() {
           checking_date: checkingDate || undefined,
           report_type: reportType,
           risk_level: riskLevel,
-          period: period || null,
+          period: period.trim(),
           score_accountant: score,
           scores: {
             checklist,
@@ -231,9 +232,9 @@ export function SonaForm() {
             </div>
           )}
         </div>
-        <label style={{ marginTop: 14 }}>Отчётный период (необязательно)
+        <label style={{ marginTop: 14 }}>Отчётный период<span className="req"> *</span>
           <input placeholder="напр. 05.2026 / 2-й кв. / Апрель" value={period}
-            onChange={(e) => setPeriod(e.target.value)} />
+            onChange={(e) => setPeriod(e.target.value)} required />
         </label>
       </div>
 
