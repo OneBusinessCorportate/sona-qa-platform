@@ -6,7 +6,14 @@ const REPORT_LABEL: Record<string, string> = { vat: 'НДС', turnover: 'Обо�
 interface ReviewRow {
   id: string; company_agr_no: string; accountant: string | null; report_type: string | null;
   efficiency_pct: number | null; record_type: string | null; period: string | null; comment: string | null;
+  checking_date: string | null; risk_level: string | null;
 }
+
+const REPORT_TYPES = [
+  { value: 'vat', label: 'НДС' },
+  { value: 'turnover', label: 'Оборот' },
+  { value: 'other', label: 'Другое' },
+];
 
 interface CompanyFinance {
   agr_no: string; name: string; accountant: string | null; income: number; expense: number;
@@ -116,10 +123,15 @@ export function SonaReport() {
   );
 }
 
-// Список проверок за день с возможностью удалить ошибочную запись.
+type EditData = { period: string; report_type: string; comment: string };
+
+// Список проверок за день с возможностью удалить или редактировать запись.
 function ReviewsToday({ date }: { date: string }) {
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<EditData>({ period: '', report_type: 'vat', comment: '' });
+  const [editBusy, setEditBusy] = useState(false);
 
   async function load() {
     const r = await api<{ reviews: ReviewRow[] }>(`/reviews?date=${date}`);
@@ -138,6 +150,22 @@ function ReviewsToday({ date }: { date: string }) {
     load();
   }
 
+  function startEdit(r: ReviewRow) {
+    setEditId(r.id);
+    setEditData({ period: r.period ?? '', report_type: r.report_type ?? 'vat', comment: r.comment ?? '' });
+  }
+
+  async function saveEdit(id: string) {
+    setEditBusy(true);
+    try {
+      await api(`/reviews/${id}`, { method: 'PATCH', body: JSON.stringify(editData) });
+      setEditId(null);
+      load();
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   return (
     <div className="card">
       <div className="report-head"><h2>Проверки за день</h2></div>
@@ -152,9 +180,40 @@ function ReviewsToday({ date }: { date: string }) {
                 <td>{r.report_type ? (REPORT_LABEL[r.report_type] ?? r.report_type) : '—'}</td>
                 <td>{pct(r.efficiency_pct)}</td>
                 <td>{r.record_type === 'problem' ? <span className="pill p-high">проблема</span> : ''}</td>
-                <td><button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button></td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button type="button" className="btn-icon" title="Редактировать" onClick={() => editId === r.id ? setEditId(null) : startEdit(r)}>✎</button>
+                  <button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button>
+                </td>
               </tr>
-              {r.comment && (
+              {editId === r.id && (
+                <tr>
+                  <td colSpan={6} style={{ padding: '10px 12px', background: 'var(--surface2, #f8f9fa)' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
+                      <label style={{ flex: '1 1 140px', minWidth: 120 }}>
+                        Отчётный период
+                        <input value={editData.period} onChange={(e) => setEditData((d) => ({ ...d, period: e.target.value }))} />
+                      </label>
+                      <label style={{ flex: '0 0 130px' }}>
+                        Тип отчёта
+                        <select value={editData.report_type} onChange={(e) => setEditData((d) => ({ ...d, report_type: e.target.value }))}>
+                          {REPORT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ flex: '2 1 240px', minWidth: 180 }}>
+                        Комментарий
+                        <textarea rows={2} value={editData.comment} onChange={(e) => setEditData((d) => ({ ...d, comment: e.target.value }))} />
+                      </label>
+                      <div style={{ display: 'flex', gap: 6, paddingBottom: 2 }}>
+                        <button type="button" className="btn-soft" disabled={editBusy} onClick={() => saveEdit(r.id)}>
+                          {editBusy ? 'Сохранение…' : 'Сохранить'}
+                        </button>
+                        <button type="button" className="btn-soft" onClick={() => setEditId(null)}>Отмена</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!editId && r.comment && (
                 <tr className="review-comment-row">
                   <td colSpan={6} className="muted small">{r.comment}</td>
                 </tr>

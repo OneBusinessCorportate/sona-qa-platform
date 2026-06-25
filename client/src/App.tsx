@@ -21,10 +21,10 @@ export function App() {
         </nav>
       </header>
       <main className="content">
-        {tab === 'form' && <SonaForm />}
-        {tab === 'report' && <SonaReport />}
-        {tab === 'efficiency' && <Efficiency />}
-        {tab === 'tickets' && <Tickets />}
+        <div style={tab !== 'form' ? { display: 'none' } : undefined}><SonaForm /></div>
+        <div style={tab !== 'report' ? { display: 'none' } : undefined}><SonaReport /></div>
+        <div style={tab !== 'efficiency' ? { display: 'none' } : undefined}><Efficiency /></div>
+        <div style={tab !== 'tickets' ? { display: 'none' } : undefined}><Tickets /></div>
       </main>
     </div>
   );

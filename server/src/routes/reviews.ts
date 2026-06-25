@@ -100,6 +100,20 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   res.status(201).json({ review, ticket: ticket ?? null });
 });
 
+// Update selected fields of an existing review (period, report_type, record_type, comment, accountant, checking_date).
+reviewsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
+  const b = req.body ?? {};
+  const allowed = ['period', 'report_type', 'risk_level', 'record_type', 'comment', 'accountant', 'checking_date'];
+  const patch: Record<string, any> = {};
+  for (const key of allowed) {
+    if (key in b) patch[key] = b[key] ?? null;
+  }
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'no_fields' });
+  const { data, error } = await supabase.from('sqa_reviews').update(patch).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ review: data });
+});
+
 // Delete a review (so Sona can correct a mistaken entry). There is no FK
 // cascade from sqa_tickets, so remove any auto-created ticket first.
 reviewsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {

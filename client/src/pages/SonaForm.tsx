@@ -233,7 +233,7 @@ export function SonaForm() {
           )}
         </div>
         <label style={{ marginTop: 14 }}>Отчётный период<span className="req"> *</span>
-          <input placeholder="напр. 05.2026 / 2-й кв. / Апрель" value={period}
+          <input placeholder="Апрель / 2-й кв. / 2026" value={period}
             onChange={(e) => setPeriod(e.target.value)} required />
         </label>
       </div>
