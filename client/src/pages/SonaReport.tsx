@@ -213,7 +213,7 @@ function ReviewsToday({ date }: { date: string }) {
                   </td>
                 </tr>
               )}
-              {!editId && r.comment && (
+              {editId !== r.id && r.comment && (
                 <tr className="review-comment-row">
                   <td colSpan={6} className="muted small">{r.comment}</td>
                 </tr>
