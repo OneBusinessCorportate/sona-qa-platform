@@ -123,7 +123,7 @@ export function SonaReport() {
         </div>
       )}
 
-      <ReviewsToday date={date} />
+      <ReviewsToday />
 
       {sendMsg && <div className={sendMsg.startsWith('✓') ? 'success' : 'muted'}>{sendMsg}</div>}
     </div>
@@ -140,8 +140,10 @@ type EditData = {
   comment: string;
 };
 
-// Список проверок за день с возможностью удалить или полностью редактировать запись.
-function ReviewsToday({ date }: { date: string }) {
+// Список проверок за период с возможностью удалить или полностью редактировать запись.
+function ReviewsToday() {
+  const [from, setFrom] = useState(today());
+  const [to, setTo] = useState(today());
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
@@ -152,10 +154,10 @@ function ReviewsToday({ date }: { date: string }) {
   const [editBusy, setEditBusy] = useState(false);
 
   async function load() {
-    const r = await api<{ reviews: ReviewRow[] }>(`/reviews?date=${date}`);
+    const r = await api<{ reviews: ReviewRow[] }>(`/reviews?from=${from}&to=${to}`);
     setRows(r.reviews);
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [from, to]);
   useEffect(() => {
     api<{ companies: Company[] }>('/companies').then((r) => setCompanies(r.companies)).catch(() => {});
   }, []);
@@ -200,7 +202,11 @@ function ReviewsToday({ date }: { date: string }) {
 
   return (
     <div className="card">
-      <div className="report-head"><h2>Проверки за день</h2></div>
+      <div className="report-head">
+        <h2>{from === to ? 'Проверки за день' : 'Проверки за период'}</h2>
+        <label className="small">с <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="small">по <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+      </div>
       <table>
         <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Отчёт</th><th>Оценка</th><th></th><th></th></tr></thead>
         <tbody>
@@ -277,7 +283,7 @@ function ReviewsToday({ date }: { date: string }) {
               )}
             </Fragment>
           ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="muted">Проверок за день нет</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={6} className="muted">Проверок за период нет</td></tr>}
         </tbody>
       </table>
     </div>

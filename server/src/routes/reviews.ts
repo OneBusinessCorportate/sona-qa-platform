@@ -18,10 +18,15 @@ reviewsRouter.get('/criteria', async (_req: AuthedRequest, res: Response) => {
   res.json({ criteria: data ?? [] });
 });
 
-// List reviews with optional filters.
+// List reviews with optional filters. Supports either ?date=YYYY-MM-DD (single day)
+// or ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive range).
 reviewsRouter.get('/', async (req: AuthedRequest, res: Response) => {
   let q = supabase.from('sqa_reviews').select('*').order('created_at', { ascending: false }).limit(500);
-  if (req.query.date) q = q.eq('checking_date', String(req.query.date));
+  if (req.query.from && req.query.to) {
+    q = q.gte('checking_date', String(req.query.from)).lte('checking_date', String(req.query.to));
+  } else if (req.query.date) {
+    q = q.eq('checking_date', String(req.query.date));
+  }
   if (req.query.accountant) q = q.eq('accountant', String(req.query.accountant));
   if (req.query.company) q = q.eq('company_agr_no', String(req.query.company));
   const { data, error } = await q;
