@@ -100,15 +100,19 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   res.status(201).json({ review, ticket: ticket ?? null });
 });
 
-// Update selected fields of an existing review (period, report_type, record_type, comment, accountant, checking_date).
+// Update fields of an existing review. If company_agr_no changes, accountant/manager auto-update.
 reviewsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   const b = req.body ?? {};
-  const allowed = ['period', 'report_type', 'risk_level', 'record_type', 'comment', 'accountant', 'checking_date'];
+  const allowed = ['company_agr_no', 'period', 'report_type', 'risk_level', 'record_type', 'comment', 'accountant', 'checking_date'];
   const patch: Record<string, any> = {};
   for (const key of allowed) {
     if (key in b) patch[key] = b[key] ?? null;
   }
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'no_fields' });
+  if (patch.company_agr_no) {
+    const { data: co } = await supabase.from('mqa_chats').select('accountant, manager').eq('agr_no', patch.company_agr_no).maybeSingle();
+    if (co) { patch.accountant = co.accountant ?? null; patch.manager = co.manager ?? null; }
+  }
   const { data, error } = await supabase.from('sqa_reviews').update(patch).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ review: data });

@@ -233,7 +233,7 @@ export function SonaForm() {
           )}
         </div>
         <label style={{ marginTop: 14 }}>Отчётный период<span className="req"> *</span>
-          <input placeholder="Апрель / 2-й кв. / 2026" value={period}
+          <input placeholder="Апрель / 2-й кв." value={period}
             onChange={(e) => setPeriod(e.target.value)} required />
         </label>
       </div>
@@ -303,7 +303,7 @@ export function SonaForm() {
   );
 }
 
-function CompanySelect({ companies, value, onChange }: { companies: Company[]; value: string; onChange: (v: string) => void }) {
+export function CompanySelect({ companies, value, onChange }: { companies: Company[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);

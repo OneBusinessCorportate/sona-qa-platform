@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api, type Company } from '../api';
+import { CompanySelect } from './SonaForm';
 
 const REPORT_LABEL: Record<string, string> = { vat: 'НДС', turnover: 'Оборот', other: 'Другое' };
 
@@ -13,6 +14,12 @@ const REPORT_TYPES = [
   { value: 'vat', label: 'НДС' },
   { value: 'turnover', label: 'Оборот' },
   { value: 'other', label: 'Другое' },
+];
+
+const RISK_LEVELS = [
+  { value: 'low', label: 'Низкий' },
+  { value: 'medium', label: 'Средний' },
+  { value: 'high', label: 'Высокий' },
 ];
 
 interface CompanyFinance {
@@ -123,14 +130,25 @@ export function SonaReport() {
   );
 }
 
-type EditData = { period: string; report_type: string; comment: string };
+type EditData = {
+  company_agr_no: string;
+  checking_date: string;
+  period: string;
+  report_type: string;
+  risk_level: string;
+  record_type: string;
+  comment: string;
+};
 
-// Список проверок за день с возможностью удалить или редактировать запись.
+// Список проверок за день с возможностью удалить или полностью редактировать запись.
 function ReviewsToday({ date }: { date: string }) {
   const [rows, setRows] = useState<ReviewRow[]>([]);
-  const [names, setNames] = useState<Record<string, string>>({});
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<EditData>({ period: '', report_type: 'vat', comment: '' });
+  const [editData, setEditData] = useState<EditData>({
+    company_agr_no: '', checking_date: '', period: '',
+    report_type: 'vat', risk_level: 'medium', record_type: 'other', comment: '',
+  });
   const [editBusy, setEditBusy] = useState(false);
 
   async function load() {
@@ -139,10 +157,12 @@ function ReviewsToday({ date }: { date: string }) {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
   useEffect(() => {
-    api<{ companies: Company[] }>('/companies')
-      .then((r) => setNames(Object.fromEntries(r.companies.map((c) => [c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no]))))
-      .catch(() => {});
+    api<{ companies: Company[] }>('/companies').then((r) => setCompanies(r.companies)).catch(() => {});
   }, []);
+
+  const names: Record<string, string> = Object.fromEntries(
+    companies.map((c) => [c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no])
+  );
 
   async function remove(id: string) {
     if (!confirm('Удалить проверку? Связанный тикет также будет удалён.')) return;
@@ -152,7 +172,15 @@ function ReviewsToday({ date }: { date: string }) {
 
   function startEdit(r: ReviewRow) {
     setEditId(r.id);
-    setEditData({ period: r.period ?? '', report_type: r.report_type ?? 'vat', comment: r.comment ?? '' });
+    setEditData({
+      company_agr_no: r.company_agr_no,
+      checking_date: r.checking_date ?? '',
+      period: r.period ?? '',
+      report_type: r.report_type ?? 'vat',
+      risk_level: r.risk_level ?? 'medium',
+      record_type: r.record_type ?? 'other',
+      comment: r.comment ?? '',
+    });
   }
 
   async function saveEdit(id: string) {
@@ -164,6 +192,10 @@ function ReviewsToday({ date }: { date: string }) {
     } finally {
       setEditBusy(false);
     }
+  }
+
+  function set(field: keyof EditData, value: string) {
+    setEditData((d) => ({ ...d, [field]: value }));
   }
 
   return (
@@ -181,34 +213,59 @@ function ReviewsToday({ date }: { date: string }) {
                 <td>{pct(r.efficiency_pct)}</td>
                 <td>{r.record_type === 'problem' ? <span className="pill p-high">проблема</span> : ''}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button type="button" className="btn-icon" title="Редактировать" onClick={() => editId === r.id ? setEditId(null) : startEdit(r)}>✎</button>
+                  <button type="button" className="btn-icon" title="Редактировать"
+                    onClick={() => editId === r.id ? setEditId(null) : startEdit(r)}>✎</button>
                   <button type="button" className="btn-icon" title="Удалить" onClick={() => remove(r.id)}>✕</button>
                 </td>
               </tr>
               {editId === r.id && (
                 <tr>
-                  <td colSpan={6} style={{ padding: '10px 12px', background: 'var(--surface2, #f8f9fa)' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
-                      <label style={{ flex: '1 1 140px', minWidth: 120 }}>
-                        Отчётный период
-                        <input value={editData.period} onChange={(e) => setEditData((d) => ({ ...d, period: e.target.value }))} />
+                  <td colSpan={6} style={{ padding: '12px 14px', background: 'var(--surface2, #f8f9fa)' }}>
+                    <div style={{ marginBottom: 10 }}>
+                      <CompanySelect companies={companies} value={editData.company_agr_no}
+                        onChange={(v) => set('company_agr_no', v)} />
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                      <label style={{ flex: '0 0 160px' }}>
+                        Дата проверки
+                        <input type="date" value={editData.checking_date}
+                          onChange={(e) => set('checking_date', e.target.value)} />
                       </label>
-                      <label style={{ flex: '0 0 130px' }}>
+                      <label style={{ flex: '1 1 130px' }}>
+                        Отчётный период
+                        <input placeholder="Апрель / 2-й кв." value={editData.period}
+                          onChange={(e) => set('period', e.target.value)} />
+                      </label>
+                      <label style={{ flex: '0 0 110px' }}>
                         Тип отчёта
-                        <select value={editData.report_type} onChange={(e) => setEditData((d) => ({ ...d, report_type: e.target.value }))}>
+                        <select value={editData.report_type} onChange={(e) => set('report_type', e.target.value)}>
                           {REPORT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                       </label>
-                      <label style={{ flex: '2 1 240px', minWidth: 180 }}>
-                        Комментарий
-                        <textarea rows={2} value={editData.comment} onChange={(e) => setEditData((d) => ({ ...d, comment: e.target.value }))} />
+                      <label style={{ flex: '0 0 110px' }}>
+                        Риск
+                        <select value={editData.risk_level} onChange={(e) => set('risk_level', e.target.value)}>
+                          {RISK_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                        </select>
                       </label>
-                      <div style={{ display: 'flex', gap: 6, paddingBottom: 2 }}>
-                        <button type="button" className="btn-soft" disabled={editBusy} onClick={() => saveEdit(r.id)}>
-                          {editBusy ? 'Сохранение…' : 'Сохранить'}
-                        </button>
-                        <button type="button" className="btn-soft" onClick={() => setEditId(null)}>Отмена</button>
-                      </div>
+                      <label style={{ flex: '0 0 110px' }}>
+                        Запись
+                        <select value={editData.record_type} onChange={(e) => set('record_type', e.target.value)}>
+                          <option value="other">Обычная</option>
+                          <option value="problem">Проблема</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label style={{ display: 'block', marginBottom: 10 }}>
+                      Комментарий
+                      <textarea rows={2} value={editData.comment}
+                        onChange={(e) => set('comment', e.target.value)} />
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" className="btn-soft" disabled={editBusy} onClick={() => saveEdit(r.id)}>
+                        {editBusy ? 'Сохранение…' : 'Сохранить'}
+                      </button>
+                      <button type="button" className="btn-soft" onClick={() => setEditId(null)}>Отмена</button>
                     </div>
                   </td>
                 </tr>
