@@ -2,19 +2,20 @@ import { Fragment, useEffect, useState } from 'react';
 import { api, type Ticket } from '../api';
 
 const STATUS = ['open', 'in_progress', 'done', 'cancelled'];
+const fmtDate = (d: string) => d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(2, 4);
 const STATUS_LABEL: Record<string, string> = {
   open: 'Открыт', in_progress: 'В работе', done: 'Готов', cancelled: 'Отменён',
 };
 const PRIORITY = ['medium', 'critical'];
 
-type EditData = { description: string; priority: string; urgent: boolean };
+type EditData = { description: string; priority: string; urgent: boolean; start_date: string; due_date: string };
 
 export function Tickets() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [onlyUrgent, setOnlyUrgent] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<EditData>({ description: '', priority: 'medium', urgent: false });
+  const [editData, setEditData] = useState<EditData>({ description: '', priority: 'medium', urgent: false, start_date: '', due_date: '' });
   const [editBusy, setEditBusy] = useState(false);
 
   async function load() {
@@ -31,11 +32,6 @@ export function Tickets() {
     load();
   }
 
-  async function changeDate(id: string, field: 'start_date' | 'due_date', value: string | null) {
-    await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify({ [field]: value }) });
-    load();
-  }
-
   async function remove(id: string) {
     if (!confirm('Удалить тикет?')) return;
     await api(`/tickets/${id}`, { method: 'DELETE' });
@@ -44,13 +40,16 @@ export function Tickets() {
 
   function startEdit(t: Ticket) {
     setEditId(t.id);
-    setEditData({ description: t.description ?? t.title ?? '', priority: t.priority, urgent: t.urgent });
+    setEditData({ description: t.description ?? t.title ?? '', priority: t.priority, urgent: t.urgent, start_date: t.start_date ?? '', due_date: t.due_date ?? '' });
   }
 
   async function saveEdit(id: string) {
     setEditBusy(true);
     try {
-      await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(editData) });
+      const body: any = { ...editData };
+      if (!body.start_date) body.start_date = null;
+      if (!body.due_date) body.due_date = null;
+      await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
       setEditId(null);
       load();
     } finally {
@@ -79,13 +78,10 @@ export function Tickets() {
                 <td><span className={`pill p-${t.priority}`}>{t.priority}</span></td>
                 <td>{t.urgent ? '🔴' : ''}</td>
                 <td>{t.description ?? t.title ?? '—'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <input type="date" value={t.start_date ?? ''} title="Начало периода"
-                    style={{ width: 130, marginRight: 4 }}
-                    onChange={(e) => changeDate(t.id, 'start_date', e.target.value || null)} />
-                  <input type="date" value={t.due_date ?? ''} title="Конец периода"
-                    style={{ width: 130 }}
-                    onChange={(e) => changeDate(t.id, 'due_date', e.target.value || null)} />
+                <td className="small muted" style={{ whiteSpace: 'nowrap' }}>
+                  {t.start_date || t.due_date
+                    ? `${t.start_date ? fmtDate(t.start_date) : '…'} — ${t.due_date ? fmtDate(t.due_date) : '…'}`
+                    : '—'}
                 </td>
                 <td>
                   <select value={t.status} onChange={(e) => changeStatus(t.id, e.target.value)}>
@@ -112,6 +108,16 @@ export function Tickets() {
                         <input type="checkbox" checked={editData.urgent}
                           onChange={(e) => setEditData((d) => ({ ...d, urgent: e.target.checked }))} />
                         🔴 Срочно
+                      </label>
+                      <label style={{ flex: '0 0 140px' }}>
+                        С
+                        <input type="date" value={editData.start_date}
+                          onChange={(e) => setEditData((d) => ({ ...d, start_date: e.target.value }))} />
+                      </label>
+                      <label style={{ flex: '0 0 140px' }}>
+                        По
+                        <input type="date" value={editData.due_date}
+                          onChange={(e) => setEditData((d) => ({ ...d, due_date: e.target.value }))} />
                       </label>
                     </div>
                     <label style={{ display: 'block', marginBottom: 10 }}>
