@@ -14,6 +14,8 @@ export function Tickets() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [onlyUrgent, setOnlyUrgent] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState<EditData>({ description: '', priority: 'medium', urgent: false, start_date: '', due_date: '' });
   const [editBusy, setEditBusy] = useState(false);
@@ -22,10 +24,12 @@ export function Tickets() {
     const qs = new URLSearchParams();
     if (onlyUrgent) qs.set('urgent', '1');
     if (statusFilter) qs.set('status', statusFilter);
+    if (dateFrom) qs.set('from', dateFrom);
+    if (dateTo) qs.set('to', dateTo);
     const r = await api<{ tickets: Ticket[] }>(`/tickets?${qs.toString()}`);
     setTickets(r.tickets);
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [onlyUrgent, statusFilter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [onlyUrgent, statusFilter, dateFrom, dateTo]);
 
   async function changeStatus(id: string, status: string) {
     await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
@@ -61,11 +65,16 @@ export function Tickets() {
     <div className="card">
       <div className="report-head">
         <h2>Тикеты</h2>
-        <label className="checkbox"><input type="checkbox" checked={onlyUrgent} onChange={(e) => setOnlyUrgent(e.target.checked)} /> только 🔴 срочные</label>
+        <label className="small">с&nbsp;<input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
+        <label className="small">по&nbsp;<input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
+        {(dateFrom || dateTo) && (
+          <button type="button" className="btn-soft small" onClick={() => { setDateFrom(''); setDateTo(''); }}>× сбросить</button>
+        )}
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">все статусы</option>
           {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
+        <label className="checkbox"><input type="checkbox" checked={onlyUrgent} onChange={(e) => setOnlyUrgent(e.target.checked)} /> только 🔴 срочные</label>
       </div>
       <table>
         <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Приоритет</th><th>Срочно</th><th>Описание</th><th>Период</th><th>Статус</th><th></th></tr></thead>

@@ -11,6 +11,8 @@ ticketsRouter.get('/', async (req: AuthedRequest, res: Response) => {
   if (req.query.urgent === '1') q = q.eq('urgent', true);
   if (req.query.company) q = q.eq('company_agr_no', String(req.query.company));
   if (req.query.accountant) q = q.eq('accountant', String(req.query.accountant));
+  if (req.query.from) q = q.gte('created_at', String(req.query.from));
+  if (req.query.to)   q = q.lte('created_at', String(req.query.to) + 'T23:59:59');
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ tickets: data ?? [] });
