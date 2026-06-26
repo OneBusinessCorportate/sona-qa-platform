@@ -13,6 +13,11 @@ interface Row extends Criteria {
   weekly: PeriodMark; daily: PeriodMark;
 }
 interface Scorecard { from: string; to: string; rows: Row[] }
+interface CriterionMeta {
+  id: string;
+  valid_from: string | null;
+  valid_to: string | null;
+}
 
 const KEYS: Array<{ id: keyof Criteria; label: string; weight: string }> = [
   { id: 'k1', label: 'К1 ошибки', weight: '0.1' },
@@ -21,6 +26,19 @@ const KEYS: Array<{ id: keyof Criteria; label: string; weight: string }> = [
   { id: 'k4', label: 'К4 документы', weight: '0.3' },
   { id: 'k5', label: 'К5 доработки', weight: '0.1' },
 ];
+
+// Format a date bound for display: "дд.мм.гг" or "…" when absent.
+const fmtBound = (d: string | null) =>
+  d ? d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(2, 4) : '…';
+
+function CriterionPeriod({ meta }: { meta: CriterionMeta | undefined }) {
+  if (!meta || (!meta.valid_from && !meta.valid_to)) return null;
+  return (
+    <span className="criterion-period">
+      {fmtBound(meta.valid_from)} — {fmtBound(meta.valid_to)}
+    </span>
+  );
+}
 
 const monthStart = () => new Date().toISOString().slice(0, 8) + '01';
 const today = () => new Date().toISOString().slice(0, 10);
@@ -41,9 +59,18 @@ export function Efficiency() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(today());
   const [data, setData] = useState<Scorecard | null>(null);
+  const [criteriaMap, setCriteriaMap] = useState<Record<string, CriterionMeta>>({});
   // Local edits keyed by accountant → { k1.. : string }.
   const [edits, setEdits] = useState<Record<string, Partial<Record<keyof Criteria, string>>>>({});
   const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    api<{ criteria: CriterionMeta[] }>('/reviews/criteria').then((r) => {
+      const map: Record<string, CriterionMeta> = {};
+      for (const c of r.criteria) map[c.id] = c;
+      setCriteriaMap(map);
+    });
+  }, []);
 
   async function load() {
     setEdits({});
@@ -110,7 +137,12 @@ export function Efficiency() {
                 <th>Бухгалтер</th>
                 <th>Пров.</th>
                 <th title="средняя оценка из проверок (1-я страница)">Оценка %</th>
-                {KEYS.map((k) => <th key={k.id} title={`вес ${k.weight}`}>{k.label}</th>)}
+                {KEYS.map((k) => (
+                  <th key={k.id} title={`вес ${k.weight}`}>
+                    {k.label}
+                    <CriterionPeriod meta={criteriaMap[k.id]} />
+                  </th>
+                ))}
                 <th>Итог Q</th>
                 <th title="Итог Q за последние 7 дней">Недельн.</th>
                 <th title="Итог Q за день «по»">Дневн.</th>

@@ -7,12 +7,15 @@
 -- the runtime weights live in server/src/efficiency.ts (SCORECARD_CRITERIA).
 --
 -- Idempotent: safe to re-run. Apply with the Supabase SQL editor or psql.
-insert into sqa_criteria (id, name, target, weight, scale_max, sort, descriptions, active) values
-  ('k1','Количество и уровень ошибок',        'accountant',10,5,1,'{"1":"критические ошибки/штрафы","3":"единичные некритические","5":"ошибок не выявлено"}'::jsonb,true),
-  ('k2','Соблюдение сроков выполнения задач',  'accountant',30,5,2,'{"1":"систематические просрочки","3":"единичные задержки","5":"все сроки соблюдены"}'::jsonb,true),
-  ('k3','Качество подготовки отчётности',      'accountant',20,5,3,'{"1":"существенные замечания","3":"мелкие замечания","5":"отчётность без замечаний"}'::jsonb,true),
-  ('k4','Полнота и корректность документов',   'accountant',30,5,4,'{"1":"регулярные недостатки","3":"единичные недостатки","5":"документы полные и корректные"}'::jsonb,true),
-  ('k5','Количество доработок после проверки', 'accountant',10,5,5,'{"1":"более 3 доработок","3":"1–2 доработки","5":"доработок не требовалось"}'::jsonb,true)
+-- valid_from / valid_to: optional date bounds for when this criterion applies.
+-- NULL on either end means "no bound" (criterion is always active in that direction).
+-- Set them in the DB directly; rerunning this seed preserves any existing values.
+insert into sqa_criteria (id, name, target, weight, scale_max, sort, descriptions, active, valid_from, valid_to) values
+  ('k1','Количество и уровень ошибок',        'accountant',10,5,1,'{"1":"критические ошибки/штрафы","3":"единичные некритические","5":"ошибок не выявлено"}'::jsonb,true,null,null),
+  ('k2','Соблюдение сроков выполнения задач',  'accountant',30,5,2,'{"1":"систематические просрочки","3":"единичные задержки","5":"все сроки соблюдены"}'::jsonb,true,null,null),
+  ('k3','Качество подготовки отчётности',      'accountant',20,5,3,'{"1":"существенные замечания","3":"мелкие замечания","5":"отчётность без замечаний"}'::jsonb,true,null,null),
+  ('k4','Полнота и корректность документов',   'accountant',30,5,4,'{"1":"регулярные недостатки","3":"единичные недостатки","5":"документы полные и корректные"}'::jsonb,true,null,null),
+  ('k5','Количество доработок после проверки', 'accountant',10,5,5,'{"1":"более 3 доработок","3":"1–2 доработки","5":"доработок не требовалось"}'::jsonb,true,null,null)
 on conflict (id) do update set
   name = excluded.name,
   target = excluded.target,
@@ -21,3 +24,4 @@ on conflict (id) do update set
   sort = excluded.sort,
   descriptions = excluded.descriptions,
   active = true;
+  -- valid_from / valid_to intentionally omitted: preserve whatever is set in the DB.

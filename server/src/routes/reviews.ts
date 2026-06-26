@@ -8,12 +8,17 @@ export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
 
 // Criteria for the scoring form (seeded later with Sona/Lilit).
-reviewsRouter.get('/criteria', async (_req: AuthedRequest, res: Response) => {
-  const { data, error } = await supabase
-    .from('sqa_criteria')
-    .select('*')
-    .eq('active', true)
-    .order('sort');
+// Optional ?date=YYYY-MM-DD filters to criteria valid on that date
+// (valid_from <= date AND valid_to >= date; null bounds are treated as open).
+reviewsRouter.get('/criteria', async (req: AuthedRequest, res: Response) => {
+  let q = supabase.from('sqa_criteria').select('*').eq('active', true).order('sort');
+  if (req.query.date) {
+    const d = String(req.query.date);
+    q = q
+      .or(`valid_from.is.null,valid_from.lte.${d}`)
+      .or(`valid_to.is.null,valid_to.gte.${d}`);
+  }
+  const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ criteria: data ?? [] });
 });
