@@ -26,5 +26,5 @@ export interface Company {
 export interface Ticket {
   id: string; company_agr_no: string; accountant: string | null; type: string;
   priority: string; urgent: boolean; status: string; title: string | null;
-  description: string | null; due_date: string | null; created_at: string;
+  description: string | null; start_date: string | null; due_date: string | null; created_at: string;
 }

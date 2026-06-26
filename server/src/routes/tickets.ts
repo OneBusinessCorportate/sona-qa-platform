@@ -16,7 +16,7 @@ ticketsRouter.get('/', async (req: AuthedRequest, res: Response) => {
   res.json({ tickets: data ?? [] });
 });
 
-const PATCHABLE = ['status', 'priority', 'urgent', 'title', 'description', 'due_date', 'resolved_at'];
+const PATCHABLE = ['status', 'priority', 'urgent', 'title', 'description', 'start_date', 'due_date', 'resolved_at'];
 
 ticketsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   const patch: Record<string, unknown> = {};

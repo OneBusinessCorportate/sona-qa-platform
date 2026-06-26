@@ -2,19 +2,20 @@ import { Fragment, useEffect, useState } from 'react';
 import { api, type Ticket } from '../api';
 
 const STATUS = ['open', 'in_progress', 'done', 'cancelled'];
+const fmtDate = (d: string) => d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(2, 4);
 const STATUS_LABEL: Record<string, string> = {
   open: 'Открыт', in_progress: 'В работе', done: 'Готов', cancelled: 'Отменён',
 };
 const PRIORITY = ['medium', 'critical'];
 
-type EditData = { description: string; priority: string; urgent: boolean };
+type EditData = { description: string; priority: string; urgent: boolean; start_date: string; due_date: string };
 
 export function Tickets() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [onlyUrgent, setOnlyUrgent] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<EditData>({ description: '', priority: 'medium', urgent: false });
+  const [editData, setEditData] = useState<EditData>({ description: '', priority: 'medium', urgent: false, start_date: '', due_date: '' });
   const [editBusy, setEditBusy] = useState(false);
 
   async function load() {
@@ -39,13 +40,16 @@ export function Tickets() {
 
   function startEdit(t: Ticket) {
     setEditId(t.id);
-    setEditData({ description: t.description ?? t.title ?? '', priority: t.priority, urgent: t.urgent });
+    setEditData({ description: t.description ?? t.title ?? '', priority: t.priority, urgent: t.urgent, start_date: t.start_date ?? '', due_date: t.due_date ?? '' });
   }
 
   async function saveEdit(id: string) {
     setEditBusy(true);
     try {
-      await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(editData) });
+      const body: any = { ...editData };
+      if (!body.start_date) body.start_date = null;
+      if (!body.due_date) body.due_date = null;
+      await api(`/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
       setEditId(null);
       load();
     } finally {
@@ -64,7 +68,7 @@ export function Tickets() {
         </select>
       </div>
       <table>
-        <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Приоритет</th><th>Срочно</th><th>Описание</th><th>Статус</th><th></th></tr></thead>
+        <thead><tr><th>Компания</th><th>Бухгалтер</th><th>Приоритет</th><th>Срочно</th><th>Описание</th><th>Период</th><th>Статус</th><th></th></tr></thead>
         <tbody>
           {tickets.map((t) => (
             <Fragment key={t.id}>
@@ -74,6 +78,11 @@ export function Tickets() {
                 <td><span className={`pill p-${t.priority}`}>{t.priority}</span></td>
                 <td>{t.urgent ? '🔴' : ''}</td>
                 <td>{t.description ?? t.title ?? '—'}</td>
+                <td className="small muted" style={{ whiteSpace: 'nowrap' }}>
+                  {t.start_date || t.due_date
+                    ? `${t.start_date ? fmtDate(t.start_date) : '…'} — ${t.due_date ? fmtDate(t.due_date) : '…'}`
+                    : '—'}
+                </td>
                 <td>
                   <select value={t.status} onChange={(e) => changeStatus(t.id, e.target.value)}>
                     {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
@@ -87,7 +96,7 @@ export function Tickets() {
               </tr>
               {editId === t.id && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '12px 14px', background: 'var(--surface2, #f8f9fa)' }}>
+                  <td colSpan={8} style={{ padding: '12px 14px', background: 'var(--surface2, #f8f9fa)' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                       <label style={{ flex: '0 0 120px' }}>
                         Приоритет
@@ -99,6 +108,16 @@ export function Tickets() {
                         <input type="checkbox" checked={editData.urgent}
                           onChange={(e) => setEditData((d) => ({ ...d, urgent: e.target.checked }))} />
                         🔴 Срочно
+                      </label>
+                      <label style={{ flex: '0 0 140px' }}>
+                        С
+                        <input type="date" value={editData.start_date}
+                          onChange={(e) => setEditData((d) => ({ ...d, start_date: e.target.value }))} />
+                      </label>
+                      <label style={{ flex: '0 0 140px' }}>
+                        По
+                        <input type="date" value={editData.due_date}
+                          onChange={(e) => setEditData((d) => ({ ...d, due_date: e.target.value }))} />
                       </label>
                     </div>
                     <label style={{ display: 'block', marginBottom: 10 }}>
@@ -117,7 +136,7 @@ export function Tickets() {
               )}
             </Fragment>
           ))}
-          {tickets.length === 0 && <tr><td colSpan={7} className="muted">Тикетов нет</td></tr>}
+          {tickets.length === 0 && <tr><td colSpan={8} className="muted">Тикетов нет</td></tr>}
         </tbody>
       </table>
     </div>
