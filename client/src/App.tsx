@@ -20,7 +20,7 @@ export function App() {
           <button className={tab === 'tickets' ? 'active' : ''} onClick={() => setTab('tickets')}>Тикеты</button>
         </nav>
       </header>
-      <main className="content">
+      <main className={`content${tab === 'tickets' ? ' content--wide' : ''}`}>
         <div style={tab !== 'form' ? { display: 'none' } : undefined}><SonaForm /></div>
         <div style={tab !== 'report' ? { display: 'none' } : undefined}><SonaReport /></div>
         <div style={tab !== 'efficiency' ? { display: 'none' } : undefined}><Efficiency /></div>
