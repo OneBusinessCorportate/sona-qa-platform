@@ -83,13 +83,13 @@ export function Tickets() {
   return (
     <div className="card">
       {/* ── Filter bar ── */}
-      <div className="report-head">
+      <div className="ticket-filters">
         <h2>Тикеты</h2>
-        <label className="small">
-          с&nbsp;<input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        <label className="date-field">
+          с <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>
-        <label className="small">
-          по&nbsp;<input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <label className="date-field">
+          по <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         {hasDateFilter && (
           <button type="button" className="btn-soft small"
@@ -97,7 +97,7 @@ export function Tickets() {
             × сбросить
           </button>
         )}
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <select className="ticket-status-filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">все статусы</option>
           {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
@@ -108,7 +108,8 @@ export function Tickets() {
       </div>
 
       {/* ── Ticket table ── */}
-      <table>
+      <div className="ticket-table-wrap">
+      <table className="ticket-table">
         <thead>
           <tr>
             <th style={{ width: 20 }} />
@@ -137,10 +138,10 @@ export function Tickets() {
                   onClick={() => openTicket(t)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td className="muted" style={{ fontSize: 9, textAlign: 'center', paddingRight: 0 }}>
-                    {isOpen ? '▼' : '▶'}
+                  <td style={{ paddingRight: 0 }}>
+                    <span className="ticket-caret">{isOpen ? '▼' : '▶'}</span>
                   </td>
-                  <td style={{ fontWeight: 500 }}>{t.company_agr_no}</td>
+                  <td><span className="ticket-co">{t.company_agr_no}</span></td>
                   <td>{t.accountant ?? '—'}</td>
                   <td><PriorityBadge priority={t.priority} urgent={t.urgent} /></td>
                   <td style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -148,7 +149,8 @@ export function Tickets() {
                   </td>
                   <td className="small muted" style={{ whiteSpace: 'nowrap' }}>{period ?? '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <select value={t.status} onChange={(e) => changeStatus(t.id, e.target.value)}>
+                    <select className={`ticket-status st-${t.status}`} value={t.status}
+                      onChange={(e) => changeStatus(t.id, e.target.value)}>
                       {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                     </select>
                   </td>
@@ -161,21 +163,19 @@ export function Tickets() {
                 {/* ── Expanded detail / edit ── */}
                 {isOpen && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '16px 20px', background: 'var(--surface2, #f8f9fa)', borderTop: 'none' }}>
+                    <td colSpan={8} className="ticket-detail">
                       {/* Full description */}
-                      {desc && (
-                        <p style={{ margin: '0 0 14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{desc}</p>
-                      )}
+                      {desc && <p className="ticket-desc">{desc}</p>}
                       {/* Edit fields */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                      <div className="ticket-edit-grid">
                         <label style={{ flex: '0 0 140px' }}>
                           Приоритет
                           <select value={editData.priority}
                             onChange={(e) => setEditData((d) => ({ ...d, priority: e.target.value }))}>
-                            {PRIORITY.map((p) => <option key={p} value={p}>{p}</option>)}
+                            {PRIORITY.map((p) => <option key={p} value={p}>{p === 'critical' ? 'критичный' : 'средний'}</option>)}
                           </select>
                         </label>
-                        <label style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 6, paddingTop: 20 }}>
+                        <label className="urgent-toggle" style={{ flex: '0 0 auto', alignSelf: 'flex-end', height: 40 }}>
                           <input type="checkbox" checked={editData.urgent}
                             onChange={(e) => setEditData((d) => ({ ...d, urgent: e.target.checked }))} />
                           🔴 Срочно
@@ -191,17 +191,17 @@ export function Tickets() {
                             onChange={(e) => setEditData((d) => ({ ...d, due_date: e.target.value }))} />
                         </label>
                       </div>
-                      <label style={{ display: 'block', marginBottom: 12 }}>
+                      <label style={{ display: 'block', marginBottom: 14 }}>
                         Описание
                         <textarea rows={3} value={editData.description}
                           onChange={(e) => setEditData((d) => ({ ...d, description: e.target.value }))} />
                       </label>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" className="btn-soft" disabled={editBusy}
+                      <div className="ticket-edit-actions">
+                        <button type="button" className="btn-primary-sm" disabled={editBusy}
                           onClick={() => saveEdit(t.id)}>
                           {editBusy ? 'Сохранение…' : 'Сохранить'}
                         </button>
-                        <button type="button" className="btn-soft" onClick={() => setOpenId(null)}>Закрыть</button>
+                        <button type="button" className="btn-ghost" onClick={() => setOpenId(null)}>Закрыть</button>
                       </div>
                     </td>
                   </tr>
@@ -218,6 +218,7 @@ export function Tickets() {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
