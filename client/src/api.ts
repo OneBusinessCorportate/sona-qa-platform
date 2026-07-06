@@ -28,3 +28,23 @@ export interface Ticket {
   priority: string; urgent: boolean; status: string; title: string | null;
   description: string | null; start_date: string | null; due_date: string | null; created_at: string;
 }
+
+export interface TicketFeedback {
+  kk_status: string | null;
+  situation_comment: string | null;
+  solution_comment: string | null;
+  feedback_submitted_at: string | null;
+  accountant_name: string | null;
+  review_action: string | null;
+  review_comment: string | null;
+  reviewer_name: string | null;
+  review_acted_at: string | null;
+}
+
+export interface SonaComment {
+  id: string;
+  problem_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+}

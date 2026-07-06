@@ -41,3 +41,79 @@ ticketsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
+
+// ── Cross-platform feedback (kk-accountants ↔ sona) ──────────────────────────
+//
+// The link between the two systems:
+//   kk_problems.problem_id = 'sona:' || sqa_tickets.id
+
+ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => {
+  const problemId = `sona:${req.params.id}`;
+
+  const { data: problem } = await supabase
+    .from('kk_problems')
+    .select('status, problem_id')
+    .eq('problem_id', problemId)
+    .maybeSingle();
+
+  if (!problem) return res.json({ feedback: null });
+
+  const [{ data: feedbacks }, { data: actions }] = await Promise.all([
+    supabase
+      .from('kk_accountant_feedback')
+      .select('situation_comment, solution_comment, submitted_at, accountant_name')
+      .eq('problem_id', problemId)
+      .order('submitted_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('kk_review_actions')
+      .select('action, review_comment, reviewer_name, created_at')
+      .eq('problem_id', problemId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ]);
+
+  const latest = feedbacks?.[0] ?? null;
+  const latestAction = actions?.[0] ?? null;
+
+  res.json({
+    feedback: {
+      kk_status: problem.status,
+      situation_comment: latest?.situation_comment ?? null,
+      solution_comment: latest?.solution_comment ?? null,
+      feedback_submitted_at: latest?.submitted_at ?? null,
+      accountant_name: latest?.accountant_name ?? null,
+      review_action: latestAction?.action ?? null,
+      review_comment: latestAction?.review_comment ?? null,
+      reviewer_name: latestAction?.reviewer_name ?? null,
+      review_acted_at: latestAction?.created_at ?? null,
+    },
+  });
+});
+
+ticketsRouter.get('/:id/comments', async (req: AuthedRequest, res: Response) => {
+  const problemId = `sona:${req.params.id}`;
+  const { data, error } = await supabase
+    .from('kk_sona_comments')
+    .select('*')
+    .eq('problem_id', problemId)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ comments: data ?? [] });
+});
+
+ticketsRouter.post('/:id/comments', async (req: AuthedRequest, res: Response) => {
+  const problemId = `sona:${req.params.id}`;
+  const body = String(req.body?.body ?? '').trim();
+  if (!body) return res.status(400).json({ error: 'body_required' });
+
+  const author = req.user?.email ?? 'Sona';
+
+  const { data, error } = await supabase
+    .from('kk_sona_comments')
+    .insert({ problem_id: problemId, author, body })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ comment: data });
+});
