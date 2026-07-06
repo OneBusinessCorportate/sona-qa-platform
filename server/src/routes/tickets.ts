@@ -114,7 +114,9 @@ ticketsRouter.post('/:id/comments', async (req: AuthedRequest, res: Response) =>
   const body = String(req.body?.body ?? '').trim();
   if (!body) return res.status(400).json({ error: 'body_required' });
 
-  const author = req.user?.email ?? 'Sona';
+  // Deliberately anonymous: accountants reading the thread in the kk app must
+  // not learn who performs the checks (no name, no email).
+  const author = 'Проверяющий';
 
   const { data, error } = await supabase
     .from('kk_sona_comments')
