@@ -47,6 +47,67 @@ ticketsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
 // The link between the two systems:
 //   kk_problems.problem_id = 'sona:' || sqa_tickets.id
 
+// Aggregated feed of everything accountants sent back on Sona's tickets —
+// feedback forms, thread comments, attachments — grouped per ticket and
+// sorted by latest activity, so nothing requires expanding tickets one by one.
+ticketsRouter.get('/feed', async (_req: AuthedRequest, res: Response) => {
+  const [{ data: fb }, { data: cm }, { data: at }] = await Promise.all([
+    supabase
+      .from('kk_accountant_feedback')
+      .select('problem_id, situation_comment, solution_comment, submitted_at, accountant_name')
+      .like('problem_id', 'sona:%')
+      .order('submitted_at', { ascending: false })
+      .limit(300),
+    supabase
+      .from('kk_sona_comments')
+      .select('problem_id, author, body, created_at')
+      .like('problem_id', 'sona:%')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('kk_problem_attachments')
+      .select('problem_id, file_name, public_url, mime_type, uploaded_by, created_at')
+      .like('problem_id', 'sona:%')
+      .order('created_at', { ascending: false })
+      .limit(500),
+  ]);
+
+  const ids = [...new Set([...(fb ?? []), ...(cm ?? []), ...(at ?? [])].map((r) => r.problem_id))];
+  if (!ids.length) return res.json({ items: [] });
+
+  const { data: problems } = await supabase
+    .from('kk_problems')
+    .select('problem_id, problem_title, client_name, accountant_name, status')
+    .in('problem_id', ids);
+  const pMap = new Map((problems ?? []).map((p) => [p.problem_id, p]));
+
+  const items = ids.map((problemId) => {
+    const p = pMap.get(problemId);
+    const feedbacks = (fb ?? []).filter((r) => r.problem_id === problemId);
+    const comments = (cm ?? []).filter((r) => r.problem_id === problemId).reverse(); // oldest first in thread
+    const attachments = (at ?? []).filter((r) => r.problem_id === problemId).reverse();
+    const lastActivity = [
+      ...feedbacks.map((r) => r.submitted_at),
+      ...comments.map((r) => r.created_at),
+      ...attachments.map((r) => r.created_at),
+    ].sort().pop() ?? null;
+    return {
+      ticket_id: problemId.slice('sona:'.length),
+      problem_id: problemId,
+      title: p?.problem_title ?? null,
+      client_name: p?.client_name ?? null,
+      accountant_name: p?.accountant_name ?? null,
+      kk_status: p?.status ?? null,
+      feedbacks,
+      comments,
+      attachments,
+      last_activity: lastActivity,
+    };
+  });
+  items.sort((a, b) => (b.last_activity ?? '').localeCompare(a.last_activity ?? ''));
+  res.json({ items });
+});
+
 ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => {
   const problemId = `sona:${req.params.id}`;
 
