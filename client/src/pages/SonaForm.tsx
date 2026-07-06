@@ -83,7 +83,16 @@ export function SonaForm() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<{ companies: Company[] }>('/companies').then((r) => setCompanies(r.companies)).catch(() => {});
+    // active=0 → include inactive clients too: Sona reviews closed/paused
+    // contracts as well (e.g. B-3273, B-3660, 442), so hiding them lost data.
+    // Active clients stay on top of the dropdown; inactive sink to the bottom.
+    api<{ companies: Company[] }>('/companies?active=0')
+      .then((r) => setCompanies(
+        [...r.companies].sort((a, b) =>
+          (a.status === 'Active' ? 0 : 1) - (b.status === 'Active' ? 0 : 1) ||
+          (a.name_agr ?? '').localeCompare(b.name_agr ?? '')),
+      ))
+      .catch(() => {});
   }, []);
 
   const selected = useMemo(() => companies.find((c) => c.agr_no === agrNo), [companies, agrNo]);
@@ -341,7 +350,10 @@ export function CompanySelect({ companies, value, onChange }: { companies: Compa
               <button type="button" key={c.agr_no} className={`combo-item ${c.agr_no === value ? 'sel' : ''}`}
                 onClick={() => { onChange(c.agr_no); setOpen(false); setQuery(''); }}>
                 <span>{c.name_agr ?? c.name_tax ?? c.agr_no}</span>
-                <span className="combo-meta">№{c.agr_no}{c.accountant ? ` · ${c.accountant}` : ''}</span>
+                <span className="combo-meta">
+                  №{c.agr_no}{c.accountant ? ` · ${c.accountant}` : ''}
+                  {c.status !== 'Active' ? ' · неактивен' : ''}
+                </span>
               </button>
             ))}
             {filtered.length === 0 && <div className="muted small combo-empty">Ничего не найдено</div>}

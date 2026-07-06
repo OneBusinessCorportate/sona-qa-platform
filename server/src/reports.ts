@@ -23,6 +23,7 @@ export interface CompanyFinance {
 
 export interface DailyReport {
   date: string;
+  dateTo?: string; // when set and different from `date`, the report covers a range
   totals: { reviews: number; companies: number; problems: number; praises: number; avgAccountant: number | null; avgClient: number | null; avgEfficiency: number | null };
   byAccountant: Array<{ accountant: string; reviews: number; avg_score: number | null; avg_efficiency: number | null; problems: number }>;
   finance: FinanceTotals;
@@ -60,19 +61,41 @@ export function financeByCompany(
 export const sumFinance = (cos: CompanyFinance[]): FinanceTotals =>
   cos.reduce<FinanceTotals>((t, c) => ({ income: t.income + c.income, expense: t.expense + c.expense }), { income: 0, expense: 0 });
 
-export async function buildDailyReport(date: string): Promise<DailyReport> {
-  const { data: totalsRows } = await supabase.from('sqa_daily_report').select('*').eq('checking_date', date);
-  const t = totalsRows?.[0];
-  const { data: byAcc } = await supabase.from('sqa_accountant_daily').select('*').eq('checking_date', date);
-  const { data: finRows } = await supabase
-    .from('sqa_reviews').select('company_agr_no, accountant, financials').eq('checking_date', date);
-  const agrNos = [...new Set((finRows ?? []).map((r) => r.company_agr_no).filter(Boolean))] as string[];
+// Average of the numeric values in `list`, rounded to `digits`; null when empty.
+const avgRound = (list: Array<number | null | undefined>, digits: number): number | null => {
+  const nums = list.filter((v): v is number => typeof v === 'number');
+  if (!nums.length) return null;
+  const f = 10 ** digits;
+  return Math.round((nums.reduce((s, v) => s + v, 0) / nums.length) * f) / f;
+};
+
+// Builds the summary over [date .. dateTo] (a single day when they're equal).
+// The aggregation mirrors the sqa_daily_report / sqa_accountant_daily views,
+// computed from sqa_reviews directly so any date range works.
+export async function buildDailyReport(date: string, dateTo: string = date): Promise<DailyReport> {
+  const { data: rows } = await supabase
+    .from('sqa_reviews')
+    .select('company_agr_no, accountant, financials, record_type, score_accountant, score_client, efficiency_pct')
+    .gte('checking_date', date)
+    .lte('checking_date', dateTo);
+  const reviews = rows ?? [];
+
+  const agrNos = [...new Set(reviews.map((r) => r.company_agr_no).filter(Boolean))] as string[];
   const names = new Map<string, string>();
   if (agrNos.length) {
     const { data: chats } = await supabase.from('mqa_chats').select('agr_no, name_agr, name_tax').in('agr_no', agrNos);
     for (const c of chats ?? []) names.set(c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no);
   }
-  const coFinance = financeByCompany(finRows, names);
+  const coFinance = financeByCompany(reviews, names);
+
+  const byAccMap = new Map<string, typeof reviews>();
+  for (const r of reviews) {
+    const name = (r.accountant ?? '').trim();
+    if (!name) continue;
+    if (!byAccMap.has(name)) byAccMap.set(name, []);
+    byAccMap.get(name)!.push(r);
+  }
+
   const { count: openTickets } = await supabase
     .from('sqa_tickets').select('id', { count: 'exact', head: true }).neq('status', 'done').neq('status', 'cancelled');
   const { count: urgentTickets } = await supabase
@@ -80,18 +103,25 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
 
   return {
     date,
+    dateTo,
     totals: {
-      reviews: t?.reviews_count ?? 0,
-      companies: t?.companies_checked ?? 0,
-      problems: t?.problems ?? 0,
-      praises: t?.praises ?? 0,
-      avgAccountant: t?.avg_score_accountant ?? null,
-      avgClient: t?.avg_score_client ?? null,
-      avgEfficiency: t?.avg_efficiency ?? null,
+      reviews: reviews.length,
+      companies: agrNos.length,
+      problems: reviews.filter((r) => r.record_type === 'problem').length,
+      praises: reviews.filter((r) => r.record_type === 'praise').length,
+      avgAccountant: avgRound(reviews.map((r) => r.score_accountant), 2),
+      avgClient: avgRound(reviews.map((r) => r.score_client), 2),
+      avgEfficiency: avgRound(reviews.map((r) => r.efficiency_pct), 1),
     },
-    byAccountant: (byAcc ?? []).map((r) => ({
-      accountant: r.accountant, reviews: r.reviews_count, avg_score: r.avg_score, avg_efficiency: r.avg_efficiency, problems: r.problems,
-    })),
+    byAccountant: [...byAccMap.entries()]
+      .map(([accountant, list]) => ({
+        accountant,
+        reviews: list.length,
+        avg_score: avgRound(list.map((r) => r.score_accountant), 2),
+        avg_efficiency: avgRound(list.map((r) => r.efficiency_pct), 1),
+        problems: list.filter((r) => r.record_type === 'problem').length,
+      }))
+      .sort((a, b) => a.accountant.localeCompare(b.accountant)),
     finance: sumFinance(coFinance),
     financeByCompany: coFinance,
     openTickets: openTickets ?? 0,
@@ -239,6 +269,7 @@ const pct = (v: number | null | undefined) => (v === null || v === undefined ? '
 // for the day plus the plan for the next day.
 export interface AuditorReport {
   date: string;
+  dateTo?: string; // when set and different from `date`, the report covers a range
   planDate: string;
   reports: Array<{ accountant: string; checked: number; total: number; avgScore: number | null }>;
   plan: Array<{ accountant: string; planned_reports: number; note: string | null }>;
@@ -254,9 +285,15 @@ const ddmmyy = (date: string) => {
   return `${d}/${m}/${y.slice(2)}`;
 };
 
-export async function buildAuditorReport(date: string): Promise<AuditorReport> {
-  const planDate = nextDay(date);
-  const { data: byAcc } = await supabase.from('sqa_accountant_daily').select('*').eq('checking_date', date);
+// Covers [date .. dateTo]; per-accountant rows from the daily view are summed
+// across the range (avg score weighted by review count). The plan shown is for
+// the day after the end of the range.
+export async function buildAuditorReport(date: string, dateTo: string = date): Promise<AuditorReport> {
+  const planDate = nextDay(dateTo);
+  const { data: byAcc } = await supabase
+    .from('sqa_accountant_daily').select('*')
+    .gte('checking_date', date)
+    .lte('checking_date', dateTo);
   const { data: workload } = await supabase.from('sqa_accountant_workload').select('accountant, total_reports');
   const { data: plan } = await supabase
     .from('sqa_daily_plan').select('accountant, planned_reports, note').eq('plan_date', planDate);
@@ -264,23 +301,45 @@ export async function buildAuditorReport(date: string): Promise<AuditorReport> {
   const totals = new Map<string, number>();
   for (const w of workload ?? []) totals.set(w.accountant, w.total_reports ?? 0);
 
+  // Sum the per-day rows per accountant; weight the efficiency by review count.
+  const agg = new Map<string, { checked: number; effSum: number; effCount: number }>();
+  for (const r of byAcc ?? []) {
+    const a = agg.get(r.accountant) ?? { checked: 0, effSum: 0, effCount: 0 };
+    const count = r.reviews_count ?? 0;
+    a.checked += count;
+    if (typeof r.avg_efficiency === 'number' && count > 0) {
+      a.effSum += r.avg_efficiency * count;
+      a.effCount += count;
+    }
+    agg.set(r.accountant, a);
+  }
+
   return {
     date,
+    dateTo,
     planDate,
-    reports: (byAcc ?? [])
-      .map((r) => ({
-        accountant: r.accountant,
-        checked: r.reviews_count ?? 0,
-        total: totals.get(r.accountant) ?? 0,
-        avgScore: r.avg_efficiency ?? null,
+    reports: [...agg.entries()]
+      .map(([accountant, a]) => ({
+        accountant,
+        checked: a.checked,
+        total: totals.get(accountant) ?? 0,
+        avgScore: a.effCount > 0 ? Math.round((a.effSum / a.effCount) * 10) / 10 : null,
       }))
       .sort((a, b) => a.accountant.localeCompare(b.accountant)),
     plan: (plan ?? []).map((p) => ({ accountant: p.accountant, planned_reports: p.planned_reports ?? 0, note: p.note ?? null })),
   };
 }
 
+// "15/06/26" for a single day, "15/06/26 — 20/06/26" for a range.
+const periodLabel = (date: string, dateTo?: string) =>
+  dateTo && dateTo !== date ? `${ddmmyy(date)} — ${ddmmyy(dateTo)}` : ddmmyy(date);
+
 export function formatAuditorText(r: AuditorReport): string {
-  const lines = [`📑 <b>ЕЖЕДНЕВНЫЙ ОТЧЁТ АУДИТОРА — ${ddmmyy(r.date)}</b>`, ``, `<b>ОТЧЁТЫ:</b>`];
+  const isRange = Boolean(r.dateTo && r.dateTo !== r.date);
+  const title = isRange
+    ? `ОТЧЁТ АУДИТОРА — ${periodLabel(r.date, r.dateTo)}`
+    : `ЕЖЕДНЕВНЫЙ ОТЧЁТ АУДИТОРА — ${ddmmyy(r.date)}`;
+  const lines = [`📑 <b>${title}</b>`, ``, `<b>ОТЧЁТЫ:</b>`];
   if (r.reports.length) {
     r.reports.forEach((a, i) => {
       const eff = a.avgScore === null ? '' : ` · ср. ${a.avgScore}%`;
@@ -300,7 +359,7 @@ export function formatAuditorText(r: AuditorReport): string {
 
 export function formatDailyText(r: DailyReport): string {
   const lines = [
-    `📋 <b>Сводка за ${ddmmyy(r.date)}</b>`,
+    `📋 <b>Сводка за ${periodLabel(r.date, r.dateTo)}</b>`,
     ``,
     `Проверок: <b>${r.totals.reviews}</b> · Компаний: <b>${r.totals.companies}</b>`,
     `Средняя оценка: <b>${pct(r.totals.avgEfficiency)}</b> · Проблем: <b>${r.totals.problems}</b>`,

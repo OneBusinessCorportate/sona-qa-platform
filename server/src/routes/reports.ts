@@ -10,7 +10,8 @@ reportsRouter.use(requireAuth);
 
 reportsRouter.get('/daily', async (req: AuthedRequest, res: Response) => {
   const date = String(req.query.date ?? todayInTz());
-  res.json(await buildDailyReport(date));
+  const to = String(req.query.to ?? date);
+  res.json(await buildDailyReport(date, to < date ? date : to));
 });
 
 reportsRouter.get('/weekly', async (req: AuthedRequest, res: Response) => {
@@ -18,10 +19,12 @@ reportsRouter.get('/weekly', async (req: AuthedRequest, res: Response) => {
   res.json(await buildWeeklyReport(weekStart));
 });
 
-// Дневной отчёт аудитора (проверено/всего + план на завтра).
+// Отчёт аудитора (проверено/всего + план на следующий день). Supports a date
+// range via ?date=…&to=… — single-day when `to` is omitted.
 reportsRouter.get('/auditor', async (req: AuthedRequest, res: Response) => {
   const date = String(req.query.date ?? todayInTz());
-  res.json(await buildAuditorReport(date));
+  const to = String(req.query.to ?? date);
+  res.json(await buildAuditorReport(date, to < date ? date : to));
 });
 
 // Всего отчётов в работе у бухгалтеров (знаменатель "проверено/всего").
@@ -117,14 +120,20 @@ reportsRouter.post('/send', async (req: AuthedRequest, res: Response) => {
   const kind = req.body?.kind === 'weekly' ? 'weekly' : req.body?.kind === 'auditor' ? 'auditor' : 'daily';
   if (kind === 'auditor') {
     const date = String(req.body?.date ?? todayInTz());
-    const report = await buildAuditorReport(date);
-    const result = await sendReport('auditor', date, formatAuditorText(report));
-    return res.json({ kind, periodLabel: date, ...result });
+    const to = String(req.body?.to ?? date);
+    const end = to < date ? date : to;
+    const report = await buildAuditorReport(date, end);
+    const label = end !== date ? `${date}_${end}` : date;
+    const result = await sendReport('auditor', label, formatAuditorText(report));
+    return res.json({ kind, periodLabel: label, ...result });
   } else if (kind === 'daily') {
     const date = String(req.body?.date ?? todayInTz());
-    const report = await buildDailyReport(date);
-    const result = await sendReport('daily', date, formatDailyText(report));
-    return res.json({ kind, periodLabel: date, ...result });
+    const to = String(req.body?.to ?? date);
+    const end = to < date ? date : to;
+    const report = await buildDailyReport(date, end);
+    const label = end !== date ? `${date}_${end}` : date;
+    const result = await sendReport('daily', label, formatDailyText(report));
+    return res.json({ kind, periodLabel: label, ...result });
   } else {
     const weekStart = String(req.body?.week ?? mondayOf(todayInTz()));
     const report = await buildWeeklyReport(weekStart);

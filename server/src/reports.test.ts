@@ -135,3 +135,21 @@ test('formatAuditorText: matches Sona\'s "проверено/всего" format'
   assert.match(txt, /План на завтра: 16\/06\/26/);
   assert.match(txt, /Аваг — 10 отчётов/);
 });
+
+test('formatDailyText: range shows both dates', () => {
+  const txt = formatDailyText({ ...baseDaily, dateTo: '2026-06-20' });
+  assert.match(txt, /Сводка за 15\/06\/26 — 20\/06\/26/);
+});
+
+test('formatDailyText: dateTo equal to date keeps single-day header', () => {
+  const txt = formatDailyText({ ...baseDaily, dateTo: '2026-06-15' });
+  assert.match(txt, /Сводка за 15\/06\/26/);
+  assert.doesNotMatch(txt, /—.*15\/06\/26.*15\/06\/26/);
+});
+
+test('formatAuditorText: range header drops «ЕЖЕДНЕВНЫЙ» and shows the period', () => {
+  const txt = formatAuditorText({ ...auditor, dateTo: '2026-06-20' });
+  assert.match(txt, /ОТЧЁТ АУДИТОРА — 15\/06\/26 — 20\/06\/26/);
+  assert.doesNotMatch(txt, /ЕЖЕДНЕВНЫЙ/);
+  assert.match(txt, /План на завтра: 16\/06\/26/);
+});

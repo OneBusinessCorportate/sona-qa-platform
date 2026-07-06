@@ -40,20 +40,21 @@ const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v}
 const money = (v: number) => v.toLocaleString('ru-RU');
 
 export function SonaReport() {
-  const [date, setDate] = useState(today());
+  const [from, setFrom] = useState(today());
+  const [to, setTo] = useState(today());
   const [daily, setDaily] = useState<Daily | null>(null);
   const [sendMsg, setSendMsg] = useState('');
 
   async function load() {
-    setDaily(await api<Daily>(`/reports/daily?date=${date}`));
+    setDaily(await api<Daily>(`/reports/daily?date=${from}&to=${to}`));
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [from, to]);
 
   async function send(kind: 'daily' | 'auditor') {
     setSendMsg('Отправка…');
     try {
       const r = await api<{ ok: boolean; skipped?: boolean; error?: string }>('/reports/send', {
-        method: 'POST', body: JSON.stringify({ kind, date }),
+        method: 'POST', body: JSON.stringify({ kind, date: from, to }),
       });
       setSendMsg(r.ok ? '✓ Отправлено в Telegram' : r.skipped ? 'Telegram не настроен' : 'Ошибка: ' + r.error);
     } catch (e) {
@@ -63,12 +64,13 @@ export function SonaReport() {
 
   return (
     <div className="report">
-      <AuditorSection date={date} onDate={setDate} onSend={() => send('auditor')} />
+      <AuditorSection from={from} to={to} onFrom={setFrom} onTo={setTo} onSend={() => send('auditor')} />
 
       <div className="card">
         <div className="report-head">
-          <h2>Сводка за день</h2>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <h2>Сводка</h2>
+          <label className="small">с <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label className="small">по <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
           <button onClick={() => send('daily')}>Отправить в Telegram</button>
         </div>
         {daily && (
@@ -87,7 +89,7 @@ export function SonaReport() {
                 {daily.byAccountant.map((a) => (
                   <tr key={a.accountant}><td>{a.accountant}</td><td>{a.reviews}</td><td>{pct(a.avg_efficiency)}</td><td>{a.problems}</td></tr>
                 ))}
-                {daily.byAccountant.length === 0 && <tr><td colSpan={4} className="muted">Нет данных за день</td></tr>}
+                {daily.byAccountant.length === 0 && <tr><td colSpan={4} className="muted">Нет данных за период</td></tr>}
               </tbody>
             </table>
           </>
@@ -159,7 +161,8 @@ function ReviewsToday() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [from, to]);
   useEffect(() => {
-    api<{ companies: Company[] }>('/companies').then((r) => setCompanies(r.companies)).catch(() => {});
+    // Include inactive clients so their names resolve in the review list too.
+    api<{ companies: Company[] }>('/companies?active=0').then((r) => setCompanies(r.companies)).catch(() => {});
   }, []);
 
   const names: Record<string, string> = Object.fromEntries(
@@ -302,8 +305,10 @@ interface Auditor {
 }
 interface PlanRow { accountant: string; planned_reports: number; note: string }
 
-// Дневной отчёт аудитора: проверено/всего по бухгалтерам + план на завтра.
-function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: string) => void; onSend: () => void }) {
+// Отчёт аудитора: проверено/всего по бухгалтерам за период + план на следующий день.
+function AuditorSection({ from, to, onFrom, onTo, onSend }: {
+  from: string; to: string; onFrom: (d: string) => void; onTo: (d: string) => void; onSend: () => void;
+}) {
   const [data, setData] = useState<Auditor | null>(null);
   const [accountants, setAccountants] = useState<string[]>([]);
   const [totals, setTotals] = useState<Record<string, string>>({});
@@ -311,12 +316,12 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
   const [saved, setSaved] = useState('');
 
   async function load() {
-    const a = await api<Auditor>(`/reports/auditor?date=${date}`);
+    const a = await api<Auditor>(`/reports/auditor?date=${from}&to=${to}`);
     setData(a);
     setTotals(Object.fromEntries(a.reports.map((r) => [r.accountant, String(r.total || '')])));
     setPlan(a.plan.length ? a.plan.map((p) => ({ accountant: p.accountant, planned_reports: p.planned_reports, note: p.note ?? '' })) : []);
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [date]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [from, to]);
   useEffect(() => {
     api<{ accountants: Array<{ name: string }> }>('/companies/meta/accountants')
       .then((r) => setAccountants(r.accountants.map((x) => x.name))).catch(() => {});
@@ -339,7 +344,8 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
     <div className="card">
       <div className="report-head">
         <h2>📑 Отчёт аудитора</h2>
-        <input type="date" value={date} onChange={(e) => onDate(e.target.value)} />
+        <label className="small">с <input type="date" value={from} onChange={(e) => onFrom(e.target.value)} /></label>
+        <label className="small">по <input type="date" value={to} onChange={(e) => onTo(e.target.value)} /></label>
         <button onClick={onSend}>Отправить в Telegram</button>
       </div>
 
@@ -358,7 +364,7 @@ function AuditorSection({ date, onDate, onSend }: { date: string; onDate: (d: st
               <td>{pct(r.avgScore)}</td>
             </tr>
           ))}
-          {(!data || data.reports.length === 0) && <tr><td colSpan={4} className="muted">Нет проверок за день</td></tr>}
+          {(!data || data.reports.length === 0) && <tr><td colSpan={4} className="muted">Нет проверок за период</td></tr>}
         </tbody>
       </table>
 
