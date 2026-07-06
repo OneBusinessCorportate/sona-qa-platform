@@ -159,6 +159,52 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
   });
 });
 
+// Sona's decision after reading the accountant's answer. Two outcomes:
+//   close  → the case is settled: kk problem becomes «Объяснено / принято»
+//            (leaves the accountant's queue) and the ticket is marked done.
+//   return → not good enough: kk problem returns to the accountant's queue
+//            («Возвращена бухгалтеру») so they must answer again; a comment
+//            explaining why is required and lands in the shared thread.
+ticketsRouter.post('/:id/resolve', async (req: AuthedRequest, res: Response) => {
+  const problemId = `sona:${req.params.id}`;
+  const action = req.body?.action === 'return' ? 'return' : req.body?.action === 'close' ? 'close' : null;
+  const comment = String(req.body?.comment ?? '').trim();
+  if (!action) return res.status(400).json({ error: 'action_must_be_close_or_return' });
+  if (action === 'return' && !comment) return res.status(400).json({ error: 'comment_required_for_return' });
+
+  const kkStatus = action === 'close' ? 'explained_accepted' : 'returned_to_accountant';
+
+  const { data: problem, error: pErr } = await supabase
+    .from('kk_problems')
+    .update({ status: kkStatus })
+    .eq('problem_id', problemId)
+    .select('problem_id, status')
+    .maybeSingle();
+  if (pErr) return res.status(500).json({ error: pErr.message });
+  if (!problem) return res.status(404).json({ error: 'problem_not_found' });
+
+  // Record the decision in the kk history; stay anonymous.
+  await supabase.from('kk_review_actions').insert({
+    problem_id: problemId,
+    reviewer_name: 'Проверяющий',
+    action: kkStatus,
+    review_comment: comment || null,
+  });
+
+  // The comment is what the accountant actually reads — put it in the thread.
+  if (comment) {
+    await supabase.from('kk_sona_comments').insert({ problem_id: problemId, author: 'Проверяющий', body: comment });
+  }
+
+  // Mirror onto the ticket itself: closing settles it, returning keeps it live.
+  const ticketPatch = action === 'close'
+    ? { status: 'done', resolved_at: new Date().toISOString() }
+    : { status: 'in_progress', resolved_at: null };
+  await supabase.from('sqa_tickets').update(ticketPatch).eq('id', req.params.id);
+
+  res.json({ ok: true, kk_status: kkStatus });
+});
+
 ticketsRouter.get('/:id/comments', async (req: AuthedRequest, res: Response) => {
   const problemId = `sona:${req.params.id}`;
   const { data, error } = await supabase

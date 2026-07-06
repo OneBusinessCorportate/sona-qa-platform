@@ -60,6 +60,21 @@ export function Answers() {
     }
   }
 
+  // Sona's decision on the answer: close the case, or send it back so the
+  // accountant must respond again (the comment explains why and is required).
+  async function resolve(ticketId: string, action: 'close' | 'return') {
+    const comment = (drafts[ticketId] ?? '').trim();
+    if (action === 'return' && !comment) return;
+    setPosting(ticketId);
+    try {
+      await api(`/tickets/${ticketId}/resolve`, { method: 'POST', body: JSON.stringify({ action, comment }) });
+      setDrafts((d) => ({ ...d, [ticketId]: '' }));
+      await load();
+    } finally {
+      setPosting(null);
+    }
+  }
+
   return (
     <div className="report">
       <div className="card">
@@ -124,12 +139,12 @@ export function Answers() {
                 <div className="ticket-comment-body">{c.body}</div>
               </div>
             ))}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               <input
-                placeholder="Ответить…"
+                placeholder="Комментарий (обязателен при возврате)…"
                 value={drafts[it.ticket_id] ?? ''}
                 onChange={(e) => setDrafts((d) => ({ ...d, [it.ticket_id]: e.target.value }))}
-                style={{ flex: 1 }}
+                style={{ flex: '1 1 240px' }}
               />
               <button
                 className="btn-soft"
@@ -137,6 +152,22 @@ export function Answers() {
                 onClick={() => reply(it.ticket_id)}
               >
                 {posting === it.ticket_id ? 'Отправка…' : 'Отправить'}
+              </button>
+              <button
+                className="btn-soft"
+                title="Комментарий обязателен — бухгалтер получит вопрос обратно и ответит снова"
+                disabled={posting === it.ticket_id || !(drafts[it.ticket_id] ?? '').trim()}
+                onClick={() => resolve(it.ticket_id, 'return')}
+              >
+                ↩ Вернуть бухгалтеру
+              </button>
+              <button
+                className="btn-soft"
+                title="Вопрос решён — снимается с бухгалтера и закрывает тикет"
+                disabled={posting === it.ticket_id}
+                onClick={() => resolve(it.ticket_id, 'close')}
+              >
+                ✓ Закрыть
               </button>
             </div>
           </div>
