@@ -81,7 +81,12 @@ ticketsRouter.get('/feed', async (_req: AuthedRequest, res: Response) => {
     .in('problem_id', ids);
   const pMap = new Map((problems ?? []).map((p) => [p.problem_id, p]));
 
-  const items = ids.map((problemId) => {
+  // A closed case («Закрыть» / resolved on the kk side) disappears from the
+  // feed entirely — only live conversations stay visible.
+  const CLOSED = new Set(['explained_accepted', 'fixed', 'auto_resolved']);
+  const openIds = ids.filter((id) => !CLOSED.has(pMap.get(id)?.status ?? ''));
+
+  const items = openIds.map((problemId) => {
     const p = pMap.get(problemId);
     const feedbacks = (fb ?? []).filter((r) => r.problem_id === problemId);
     const comments = (cm ?? []).filter((r) => r.problem_id === problemId).reverse(); // oldest first in thread
