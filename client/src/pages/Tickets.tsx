@@ -323,6 +323,20 @@ export function Tickets() {
                                 )}
                               </div>
                             )}
+
+                            {(cached.feedback.attachments?.length ?? 0) > 0 && (
+                              <div className="ticket-feedback-block">
+                                <div className="ticket-feedback-label">Вложения</div>
+                                <div className="ticket-attachments">
+                                  {cached.feedback.attachments!.map((a) => (
+                                    <a key={a.id} href={a.public_url} target="_blank" rel="noreferrer" className="ticket-attachment">
+                                      {(a.mime_type ?? '').startsWith('image/') ? '🖼' : '📎'} {a.file_name}
+                                      {a.uploaded_by && <span className="muted small"> · {a.uploaded_by}</span>}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
 

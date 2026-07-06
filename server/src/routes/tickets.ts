@@ -58,7 +58,7 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
 
   if (!problem) return res.json({ feedback: null });
 
-  const [{ data: feedbacks }, { data: actions }] = await Promise.all([
+  const [{ data: feedbacks }, { data: actions }, { data: attachments }] = await Promise.all([
     supabase
       .from('kk_accountant_feedback')
       .select('situation_comment, solution_comment, submitted_at, accountant_name')
@@ -71,6 +71,12 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
       .eq('problem_id', problemId)
       .order('created_at', { ascending: false })
       .limit(1),
+    // Files (documents/screenshots) the accountant optionally attached.
+    supabase
+      .from('kk_problem_attachments')
+      .select('id, file_name, public_url, mime_type, uploaded_by, created_at')
+      .eq('problem_id', problemId)
+      .order('created_at', { ascending: true }),
   ]);
 
   const latest = feedbacks?.[0] ?? null;
@@ -87,6 +93,7 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
       review_comment: latestAction?.review_comment ?? null,
       reviewer_name: latestAction?.reviewer_name ?? null,
       review_acted_at: latestAction?.created_at ?? null,
+      attachments: attachments ?? [],
     },
   });
 });

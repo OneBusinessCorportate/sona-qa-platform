@@ -39,6 +39,16 @@ export interface TicketFeedback {
   review_comment: string | null;
   reviewer_name: string | null;
   review_acted_at: string | null;
+  attachments?: TicketAttachment[];
+}
+
+export interface TicketAttachment {
+  id: string;
+  file_name: string;
+  public_url: string;
+  mime_type: string | null;
+  uploaded_by: string | null;
+  created_at: string;
 }
 
 export interface SonaComment {

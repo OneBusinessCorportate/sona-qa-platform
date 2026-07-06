@@ -282,3 +282,8 @@ tbody tr:hover { background: #f8fafc; }
 }
 .ticket-comments-section .btn-primary-sm:hover { background: var(--primary-dark); }
 .ticket-comments-section .btn-primary-sm:disabled { opacity: .55; cursor: default; }
+
+/* Attachments the accountant added with feedback */
+.ticket-attachments { display: flex; flex-direction: column; gap: 4px; }
+.ticket-attachment { font-size: 13px; text-decoration: none; }
+.ticket-attachment:hover { text-decoration: underline; }
