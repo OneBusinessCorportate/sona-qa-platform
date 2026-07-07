@@ -20,7 +20,7 @@ services:
       - key: CRON_TICKETS_ENABLED
         value: "true"
       - key: CRON_TICKETS_DAILY
-        value: "30 18 * * *"
+        value: "0 19 * * *"
       # Secrets — set in the Render dashboard, do not commit:
       - key: SUPABASE_URL
         sync: false

@@ -17,6 +17,14 @@ test('dayRangeUtc: UTC day is the identity window', () => {
   });
 });
 
+test('dayRangeUtc: 19:00 cutoff → the day runs 19:00 yesterday .. 19:00 today', () => {
+  // Yerevan 19:00 = 15:00 UTC; after-19:00 submissions land in the next day.
+  assert.deepEqual(dayRangeUtc('2026-07-07', 'Asia/Yerevan', 19), {
+    fromIso: '2026-07-06T15:00:00.000Z',
+    toIso: '2026-07-07T15:00:00.000Z',
+  });
+});
+
 test('countByAccountant: groups, trims, lumps blank names', () => {
   const rows = [
     { accountant: 'Aida' }, { accountant: 'Aida ' }, { accountant: 'Gayane' },
@@ -35,8 +43,9 @@ test('countByAccountant: empty input → empty breakdown', () => {
 
 const sample: SonaTicketsDaily = {
   date: '2026-07-07',
-  fromIso: '2026-07-06T20:00:00.000Z',
-  toIso: '2026-07-07T20:00:00.000Z',
+  cutoffHour: 19,
+  fromIso: '2026-07-06T15:00:00.000Z',
+  toIso: '2026-07-07T15:00:00.000Z',
   total: 5,
   ticketsCreated: 3,
   byAccountant: [
@@ -49,6 +58,7 @@ test('formatSonaTicketsDailyText: full message with breakdown and accuracy block
   const text = formatSonaTicketsDailyText(sample);
   assert.match(text, /Ежедневный отчёт по тикетам Sona/);
   assert.match(text, /Дата: 07\.07\.2026/);
+  assert.match(text, /Период: 06\.07\.2026 19:00 — 07\.07\.2026 19:00/);
   assert.match(text, /Всего тикетов: <b>5<\/b>/);
   assert.match(text, /передано бухгалтерам как тикет: 3/);
   assert.match(text, /• Gayane: 3\n• Aida: 2/);

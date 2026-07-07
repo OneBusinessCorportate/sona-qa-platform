@@ -18,13 +18,21 @@ function tzOffsetAt(dateStr: string, tz: string): string {
 }
 
 // UTC instants covering one local day in `tz`: [fromIso, toIso).
-export function dayRangeUtc(dateStr: string, tz = env.tz): { fromIso: string; toIso: string } {
-  const next = new Date(`${dateStr}T12:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const nextStr = next.toISOString().slice(0, 10);
+// With cutoffHour > 0 the "day" runs from the cutoff on the PREVIOUS calendar
+// date to the cutoff on `dateStr` (e.g. cutoff 19 → 06.07 19:00 … 07.07 19:00),
+// so anything after the cutoff belongs to the next day's report.
+export function dayRangeUtc(dateStr: string, tz = env.tz, cutoffHour = 0): { fromIso: string; toIso: string } {
+  const shift = (days: number) => {
+    const d = new Date(`${dateStr}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const hh = String(cutoffHour).padStart(2, '0');
+  const fromDate = cutoffHour > 0 ? shift(-1) : dateStr;
+  const toDate = cutoffHour > 0 ? dateStr : shift(1);
   return {
-    fromIso: new Date(`${dateStr}T00:00:00${tzOffsetAt(dateStr, tz)}`).toISOString(),
-    toIso: new Date(`${nextStr}T00:00:00${tzOffsetAt(nextStr, tz)}`).toISOString(),
+    fromIso: new Date(`${fromDate}T${hh}:00:00${tzOffsetAt(fromDate, tz)}`).toISOString(),
+    toIso: new Date(`${toDate}T${hh}:00:00${tzOffsetAt(toDate, tz)}`).toISOString(),
   };
 }
 

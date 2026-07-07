@@ -34,7 +34,10 @@ export const env = {
   // Daily Sona ticket-count report. Can be enabled on its own via
   // CRON_TICKETS_ENABLED without turning on the other scheduled reports.
   cronTicketsEnabled: (process.env.CRON_TICKETS_ENABLED ?? process.env.CRON_ENABLED ?? 'false') === 'true',
-  cronTicketsDaily: process.env.CRON_TICKETS_DAILY ?? '30 18 * * *',
+  cronTicketsDaily: process.env.CRON_TICKETS_DAILY ?? '0 19 * * *',
+  // The Sona ticket day closes at this local hour: the report for date D counts
+  // [D-1 19:00 .. D 19:00); everything after the cutoff goes to the next day.
+  ticketsCutoffHour: Number(process.env.TICKETS_DAY_CUTOFF_HOUR ?? 19),
   // Optional shared secret for the public /api/cron/* endpoints (Render Cron).
   cronSecret: process.env.CRON_SECRET ?? '',
   tz: process.env.TZ ?? 'Asia/Yerevan',
