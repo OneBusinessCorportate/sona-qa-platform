@@ -9,7 +9,7 @@ export interface SendResult {
 
 // Sends an HTML message to the configured Telegram chat and logs it to
 // sqa_notifications (unique on kind+period_label prevents duplicate sends).
-export async function sendReport(kind: 'daily' | 'weekly' | 'auditor', periodLabel: string, text: string): Promise<SendResult> {
+export async function sendReport(kind: 'daily' | 'weekly' | 'auditor' | 'tickets', periodLabel: string, text: string): Promise<SendResult> {
   if (!telegramConfigured()) {
     console.warn('Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID missing) — skipping send.');
     return { ok: false, skipped: true, error: 'telegram_not_configured' };
@@ -31,10 +31,11 @@ export async function sendReport(kind: 'daily' | 'weekly' | 'auditor', periodLab
   }
 
   // upsert keeps one row per (kind, period_label); records last attempt outcome.
-  await supabase.from('sqa_notifications').upsert(
+  const { error: logErr } = await supabase.from('sqa_notifications').upsert(
     { kind, period_label: periodLabel, chat_id: env.telegramChatId, status, payload: text, error: error ?? null },
     { onConflict: 'kind,period_label' },
   );
+  if (logErr) console.warn(`[telegram] could not record notification (${kind} ${periodLabel}): ${logErr.message}`);
 
   return { ok: status === 'sent', error };
 }

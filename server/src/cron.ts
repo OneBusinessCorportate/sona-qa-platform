@@ -1,17 +1,35 @@
 import cron from 'node-cron';
 import { env, telegramConfigured } from './env.js';
 import { buildDailyReport, buildWeeklyReport, formatDailyText, formatWeeklyText } from './reports.js';
+import { buildSonaTicketsDaily, formatSonaTicketsDailyText } from './ticketsDaily.js';
 import { sendReport } from './telegram.js';
 import { isoWeekLabel, mondayOf, todayInTz } from './time.js';
 
 export function startCron() {
-  if (!env.cronEnabled) {
+  if (!env.cronEnabled && !env.cronTicketsEnabled) {
     console.log('Cron disabled (CRON_ENABLED != true). Reports can still be sent manually.');
     return;
   }
   if (!telegramConfigured()) {
     console.warn('Cron enabled but Telegram not configured — scheduled sends will be skipped.');
   }
+
+  if (env.cronTicketsEnabled) {
+    cron.schedule(env.cronTicketsDaily, async () => {
+      try {
+        const date = todayInTz();
+        const report = await buildSonaTicketsDaily(date);
+        const r = await sendReport('tickets', date, formatSonaTicketsDailyText(report));
+        console.log(`[cron] sona-tickets ${date}:`, r);
+      } catch (e) {
+        // A failing count/send must never take the platform down.
+        console.error('[cron] sona-tickets failed:', e);
+      }
+    }, { timezone: env.tz });
+    console.log(`Sona tickets cron started (tz=${env.tz}, schedule="${env.cronTicketsDaily}").`);
+  }
+
+  if (!env.cronEnabled) return;
 
   cron.schedule(env.cronDaily, async () => {
     const date = todayInTz();
