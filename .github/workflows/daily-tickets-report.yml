@@ -1,0 +1,22 @@
+name: Daily Sona tickets report
+
+# Render's free instance spins down when idle, so its in-process cron can't be
+# trusted to fire at 19:00. This workflow calls the report endpoint instead —
+# the request wakes the instance (cold start ~1 min, hence the retries) and the
+# endpoint counts the day [yesterday 19:00 .. today 19:00) and sends Telegram.
+
+on:
+  schedule:
+    - cron: "0 15 * * *" # 15:00 UTC = 19:00 Asia/Yerevan
+  workflow_dispatch: {} # manual "Run workflow" button for testing
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the report endpoint
+        run: |
+          resp=$(curl -sS -X POST --max-time 180 --retry 6 --retry-delay 20 --retry-all-errors \
+            "https://ob-sona-qa-platform.onrender.com/api/cron/sona-tickets-daily")
+          echo "Response: $resp"
+          echo "$resp" | grep -q '"ok":true'
