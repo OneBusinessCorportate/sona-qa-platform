@@ -15,6 +15,7 @@ import { dayRangeUtc, todayInTz } from './time.js';
 
 export interface SonaTicketsDaily {
   date: string; // local day (env.tz) being counted
+  cutoffHour: number; // day boundary: [date-1 {cutoff}:00 .. date {cutoff}:00)
   fromIso: string; // UTC range actually queried: [fromIso, toIso)
   toIso: string;
   total: number; // report forms Sona submitted that day
@@ -37,8 +38,8 @@ export function countByAccountant(rows: Array<{ accountant?: string | null }>): 
 }
 
 export async function buildSonaTicketsDaily(date: string): Promise<SonaTicketsDaily> {
-  const { fromIso, toIso } = dayRangeUtc(date);
-  console.log(`[sona-tickets] module=sqa (Sona QA only) day=${date} tz=${env.tz} range=[${fromIso} .. ${toIso})`);
+  const { fromIso, toIso } = dayRangeUtc(date, env.tz, env.ticketsCutoffHour);
+  console.log(`[sona-tickets] module=sqa (Sona QA only) day=${date} tz=${env.tz} cutoff=${env.ticketsCutoffHour}:00 range=[${fromIso} .. ${toIso})`);
 
   const { data: forms, error } = await supabase
     .from('sqa_reviews')
@@ -57,6 +58,7 @@ export async function buildSonaTicketsDaily(date: string): Promise<SonaTicketsDa
 
   const report: SonaTicketsDaily = {
     date,
+    cutoffHour: env.ticketsCutoffHour,
     fromIso,
     toIso,
     total: (forms ?? []).length,
@@ -80,12 +82,22 @@ export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
     `📊 <b>Ежедневный отчёт по тикетам Sona</b>`,
     ``,
     `Дата: ${ddmmyyyy(r.date)}`,
+  ];
+  if (r.cutoffHour > 0) {
+    // The day closes at the cutoff; show the exact window so Sona's manual
+    // check counts the same period as the bot.
+    const prev = new Date(`${r.date}T12:00:00Z`);
+    prev.setUTCDate(prev.getUTCDate() - 1);
+    const hh = `${String(r.cutoffHour).padStart(2, '0')}:00`;
+    lines.push(`Период: ${ddmmyyyy(prev.toISOString().slice(0, 10))} ${hh} — ${ddmmyyyy(r.date)} ${hh}`);
+  }
+  lines.push(
     ``,
     `Всего тикетов: <b>${r.total}</b>`,
     `(из них передано бухгалтерам как тикет: ${r.ticketsCreated})`,
     ``,
     `<b>По бухгалтерам:</b>`,
-  ];
+  );
   if (r.byAccountant.length) {
     for (const a of r.byAccountant) lines.push(`• ${a.accountant}: ${a.count}`);
   } else {
