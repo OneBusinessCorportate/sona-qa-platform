@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { supabase } from '../supabase.js';
 import { buildDailyReport, buildWeeklyReport, buildAuditorReport, buildScorecard, formatDailyText, formatWeeklyText, formatAuditorText } from '../reports.js';
+import { buildSonaTicketsDaily, formatSonaTicketsDailyText } from '../ticketsDaily.js';
 import { sendReport } from '../telegram.js';
 import { isoWeekLabel, mondayOf, todayInTz } from '../time.js';
 
@@ -25,6 +26,16 @@ reportsRouter.get('/auditor', async (req: AuthedRequest, res: Response) => {
   const date = String(req.query.date ?? todayInTz());
   const to = String(req.query.to ?? date);
   res.json(await buildAuditorReport(date, to < date ? date : to));
+});
+
+// Дневной подсчёт тикетов Sona (формы за день + разбивка по бухгалтерам).
+reportsRouter.get('/tickets-daily', async (req: AuthedRequest, res: Response) => {
+  try {
+    const date = String(req.query.date ?? todayInTz());
+    res.json(await buildSonaTicketsDaily(date));
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'internal_error' });
+  }
 });
 
 // Всего отчётов в работе у бухгалтеров (знаменатель "проверено/всего").
@@ -117,7 +128,17 @@ reportsRouter.get('/notifications', async (_req: AuthedRequest, res: Response) =
 
 // Manually trigger a Telegram send (e.g. "Send now" button in the UI).
 reportsRouter.post('/send', async (req: AuthedRequest, res: Response) => {
-  const kind = req.body?.kind === 'weekly' ? 'weekly' : req.body?.kind === 'auditor' ? 'auditor' : 'daily';
+  const kind = ['weekly', 'auditor', 'tickets'].includes(req.body?.kind) ? (req.body.kind as 'weekly' | 'auditor' | 'tickets') : 'daily';
+  if (kind === 'tickets') {
+    try {
+      const date = String(req.body?.date ?? todayInTz());
+      const report = await buildSonaTicketsDaily(date);
+      const result = await sendReport('tickets', date, formatSonaTicketsDailyText(report));
+      return res.json({ kind, periodLabel: date, ...result });
+    } catch (e) {
+      return res.status(500).json({ kind, ok: false, error: e instanceof Error ? e.message : 'internal_error' });
+    }
+  }
   if (kind === 'auditor') {
     const date = String(req.body?.date ?? todayInTz());
     const to = String(req.body?.to ?? date);

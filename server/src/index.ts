@@ -8,6 +8,7 @@ import { companiesRouter } from './routes/companies.js';
 import { reviewsRouter } from './routes/reviews.js';
 import { ticketsRouter } from './routes/tickets.js';
 import { reportsRouter } from './routes/reports.js';
+import { sonaTicketsDailyCronHandler } from './ticketsDaily.js';
 import { startCron } from './cron.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,10 @@ app.use('/api/companies', companiesRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/reports', reportsRouter);
+// Daily Sona ticket-count Telegram report — entry point for Render Cron
+// (guarded by CRON_SECRET when set; see ticketsDaily.ts).
+app.get('/api/cron/sona-tickets-daily', sonaTicketsDailyCronHandler);
+app.post('/api/cron/sona-tickets-daily', sonaTicketsDailyCronHandler);
 
 // Serve the built client in production.
 const clientDist = path.resolve(__dirname, '../../client/dist');
