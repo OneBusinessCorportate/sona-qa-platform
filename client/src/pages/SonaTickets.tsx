@@ -22,7 +22,7 @@ const TASK_STATUS_LABEL: Record<string, string> = {
   open: 'Открыта', in_progress: 'В работе', done: 'Готова', cancelled: 'Отменена',
 };
 
-// "Тикеты Sona" — daily ticket/check count that Sona confirms. Uses exactly the
+// "Подсчёт тикетов" — daily ticket/check count that Sona confirms. Uses exactly the
 // same source of truth (/reports/tickets-daily) as the Telegram report, so the
 // numbers here and in Telegram always match.
 export function SonaTickets() {
@@ -62,7 +62,7 @@ export function SonaTickets() {
     <div className="report">
       <div className="card">
         <div className="report-head">
-          <h2>📊 Тикеты Sona</h2>
+          <h2>📊 Подсчёт тикетов за день</h2>
           <label className="small">дата <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
           <button className="btn-soft" onClick={load} disabled={loading}>{loading ? '…' : 'Обновить'}</button>
           <button onClick={sendTelegram}>Отправить в Telegram</button>

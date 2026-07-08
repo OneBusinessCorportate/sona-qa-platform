@@ -5,7 +5,7 @@ import { sendReport } from './telegram.js';
 import { todayInTz } from './time.js';
 
 // Ежедневный подсчёт тикетов/проверок Sona — single source of truth shared by
-// the Telegram report AND the dashboard "Тикеты Sona" section. Counts the
+// the Telegram report AND the dashboard "Подсчёт тикетов" section. Counts the
 // technical checks Sona performed on a given LOCAL day and breaks them down per
 // accountant.
 //
@@ -270,7 +270,7 @@ export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
     `Фактически по проверке Sona: ___ тикетов.`,
     `Разница: ___.`,
     ``,
-    `Подтвердите число в дашборде («Тикеты Sona»): совпадает ли ${r.total} с реальным количеством проверок за день?`,
+    `Подтвердите число в дашборде («Подсчёт тикетов»): совпадает ли ${r.total} с реальным количеством проверок за день?`,
   );
   return lines.join('\n');
 }

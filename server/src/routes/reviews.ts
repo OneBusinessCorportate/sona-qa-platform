@@ -130,7 +130,7 @@ reviewsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
 
 // Record the accountant's response to a detected check and/or Sona's appeal
 // decision. Body: { accountant_response_status?: 'pending'|'agreed'|'appealed',
-// sona_appeal_decision?: 'accepted'|'rejected'|null }. Used by the "Тикеты Sona"
+// sona_appeal_decision?: 'accepted'|'rejected'|null }. Used by the "Подсчёт тикетов"
 // dashboard to track agreed / appealed / appeal-accepted / appeal-rejected.
 const RESP_STATUSES = ['pending', 'agreed', 'appealed'];
 const APPEAL_DECISIONS = ['accepted', 'rejected'];
