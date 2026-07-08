@@ -128,6 +128,36 @@ reviewsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   res.json({ review: data });
 });
 
+// Record the accountant's response to a detected check and/or Sona's appeal
+// decision. Body: { accountant_response_status?: 'pending'|'agreed'|'appealed',
+// sona_appeal_decision?: 'accepted'|'rejected'|null }. Used by the "Тикеты Sona"
+// dashboard to track agreed / appealed / appeal-accepted / appeal-rejected.
+const RESP_STATUSES = ['pending', 'agreed', 'appealed'];
+const APPEAL_DECISIONS = ['accepted', 'rejected'];
+reviewsRouter.patch('/:id/response', async (req: AuthedRequest, res: Response) => {
+  const b = req.body ?? {};
+  const patch: Record<string, any> = {};
+  if ('accountant_response_status' in b) {
+    const v = b.accountant_response_status;
+    if (v !== null && !RESP_STATUSES.includes(v)) return res.status(400).json({ error: 'bad_response_status' });
+    patch.accountant_response_status = v ?? null;
+    // Clearing the response (or setting it to non-appealed) drops any appeal decision.
+    if (v !== 'appealed') patch.sona_appeal_decision = null;
+  }
+  if ('sona_appeal_decision' in b) {
+    const v = b.sona_appeal_decision;
+    if (v !== null && !APPEAL_DECISIONS.includes(v)) return res.status(400).json({ error: 'bad_appeal_decision' });
+    patch.sona_appeal_decision = v ?? null;
+    // A decision only makes sense on an appealed check — mark it appealed.
+    if (v) patch.accountant_response_status = 'appealed';
+  }
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'no_fields' });
+  patch.updated_at = new Date().toISOString();
+  const { data, error } = await supabase.from('sqa_reviews').update(patch).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ review: data });
+});
+
 // Delete a review (so Sona can correct a mistaken entry). There is no FK
 // cascade from sqa_tickets, so remove any auto-created ticket first.
 reviewsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {

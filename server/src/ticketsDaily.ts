@@ -2,72 +2,224 @@ import type { Request, Response } from 'express';
 import { env } from './env.js';
 import { supabase } from './supabase.js';
 import { sendReport } from './telegram.js';
-import { dayRangeUtc, todayInTz } from './time.js';
+import { todayInTz } from './time.js';
 
-// Ежедневный отчёт по тикетам Sona — counts the report forms Sona submitted
-// during one local day (Asia/Yerevan) and breaks them down per accountant.
+// Ежедневный подсчёт тикетов/проверок Sona — single source of truth shared by
+// the Telegram report AND the dashboard "Тикеты Sona" section. Counts the
+// technical checks Sona performed on a given LOCAL day and breaks them down per
+// accountant.
 //
-// Scope: ONLY the Sona QA platform. The count reads sqa_reviews (one row per
-// submitted Sona report form) and sqa_tickets (the accountant tickets the DB
-// trigger creates from those forms). It never touches mqa_* (Margarita / AI
-// detections) or kk_* (accountants' platform) tables, so no other module's
-// data can leak into the numbers.
+// A "detected ticket/check" IS one sqa_reviews row (one company check Sona did),
+// so there is no separate detection table to drift out of sync.
+//
+// The day is keyed on `checking_date` — the date Sona says she performed the
+// check — NOT on `created_at` (when the row was inserted). Sona enters reviews
+// in batches, often a day late or back-dated, so binning by insertion time put
+// checks on the wrong day and produced spurious 0-ticket days. `checking_date`
+// is exactly what every other report/dashboard already uses, so Telegram and
+// the dashboard now agree by construction.
+//
+// Scope: ONLY the Sona QA platform (sqa_*). AI and Margarita detections live in
+// separate mqa_* tables and are never read here; as an explicit guard we also
+// drop any sqa_reviews row whose reviewer is an AI/Margarita marker (see
+// isSonaCheck) so such data could never leak into the count.
+
+export type AccountantResponse = 'pending' | 'agreed' | 'appealed';
+export type AppealDecision = 'accepted' | 'rejected' | null;
+export type ConfirmationStatus = 'pending' | 'confirmed' | 'incorrect' | 'needs_review';
+
+export interface SonaTicketCheck {
+  id: string; // sqa_reviews.id
+  checkingDate: string;
+  accountant: string;
+  companyAgrNo: string;
+  companyName: string | null;
+  reportType: string | null;
+  recordType: string | null;
+  efficiencyPct: number | null;
+  evidence: string | null; // Sona's comment on the review — the visible proof
+  reviewer: string;
+  hasTicket: boolean; // produced an accountant ticket (record_type = 'problem')
+  ticketId: string | null;
+  accountantResponse: AccountantResponse;
+  appealDecision: AppealDecision;
+}
+
+export interface ResponseSummary {
+  total: number;
+  agreed: number;
+  appealed: number;
+  appealAccepted: number;
+  appealRejected: number;
+  pending: number;
+}
+
+export interface AccountantBreakdown extends ResponseSummary {
+  accountant: string;
+  count: number; // = total; kept for the Telegram formatter / back-compat
+}
+
+export interface SonaTicketConfirmation {
+  checkDate: string;
+  detectedTotal: number;
+  correctedTotal: number | null;
+  confirmationStatus: ConfirmationStatus;
+  confirmedBySona: boolean;
+  sonaComment: string | null;
+  confirmedAt: string | null;
+}
 
 export interface SonaTicketsDaily {
-  date: string; // local day (env.tz) being counted
-  cutoffHour: number; // day boundary: [date-1 {cutoff}:00 .. date {cutoff}:00)
-  fromIso: string; // UTC range actually queried: [fromIso, toIso)
-  toIso: string;
-  total: number; // report forms Sona submitted that day
+  date: string; // local day (env.tz) being counted, keyed on checking_date
+  total: number; // Sona technical checks that day (AI/Margarita excluded)
   ticketsCreated: number; // of those, how many produced an accountant ticket
-  byAccountant: Array<{ accountant: string; count: number }>;
+  byAccountant: AccountantBreakdown[];
+  responses: ResponseSummary;
+  confirmation: SonaTicketConfirmation | null;
+  checks: SonaTicketCheck[]; // per-check evidence rows for the dashboard
 }
 
 export const NO_ACCOUNTANT = 'Без бухгалтера';
 
-// Per-accountant counts; blank names are lumped under NO_ACCOUNTANT.
-export function countByAccountant(rows: Array<{ accountant?: string | null }>): SonaTicketsDaily['byAccountant'] {
-  const by = new Map<string, number>();
-  for (const r of rows) {
-    const name = (r.accountant ?? '').trim() || NO_ACCOUNTANT;
-    by.set(name, (by.get(name) ?? 0) + 1);
+// One stored review as far as counting cares about it.
+interface ReviewRow {
+  id: string;
+  accountant?: string | null;
+  company_agr_no?: string | null;
+  report_type?: string | null;
+  record_type?: string | null;
+  efficiency_pct?: number | null;
+  comment?: string | null;
+  reviewer?: string | null;
+  checking_date?: string | null;
+  accountant_response_status?: string | null;
+  sona_appeal_decision?: string | null;
+}
+
+// A review counts as a Sona technical check unless its reviewer is an AI or
+// Margarita marker. sqa_reviews is already Sona-only (reviewer defaults to
+// 'Sona' / Sona's login email), but this keeps the exclusion explicit and safe
+// if a non-Sona reviewer is ever written.
+export function isSonaCheck(row: { reviewer?: string | null }): boolean {
+  const r = (row.reviewer ?? '').trim().toLowerCase();
+  if (!r) return true; // unlabelled → treat as Sona's own
+  if (r.includes('margarita') || r.includes('марг')) return false; // Margarita detections
+  if (r.includes('бот') || r.includes('bot')) return false; // bot detections
+  // "ai" as a standalone word/prefix (JS \b is ASCII-only, so match explicitly).
+  if (/(^|[^a-z])ai([^a-z]|$)/.test(r)) return false;
+  return true;
+}
+
+const normResponse = (v?: string | null): AccountantResponse =>
+  v === 'agreed' || v === 'appealed' ? v : 'pending';
+const normAppeal = (v?: string | null): AppealDecision =>
+  v === 'accepted' || v === 'rejected' ? v : null;
+
+const emptySummary = (): ResponseSummary =>
+  ({ total: 0, agreed: 0, appealed: 0, appealAccepted: 0, appealRejected: 0, pending: 0 });
+
+function tally(acc: ResponseSummary, resp: AccountantResponse, appeal: AppealDecision): void {
+  acc.total += 1;
+  if (resp === 'agreed') acc.agreed += 1;
+  else if (resp === 'appealed') acc.appealed += 1;
+  else acc.pending += 1;
+  if (appeal === 'accepted') acc.appealAccepted += 1;
+  else if (appeal === 'rejected') acc.appealRejected += 1;
+}
+
+// Per-accountant counts + response tally; blank names lump under NO_ACCOUNTANT.
+export function summarizeByAccountant(checks: SonaTicketCheck[]): AccountantBreakdown[] {
+  const by = new Map<string, AccountantBreakdown>();
+  for (const c of checks) {
+    const name = (c.accountant ?? '').trim() || NO_ACCOUNTANT;
+    let row = by.get(name);
+    if (!row) { row = { accountant: name, count: 0, ...emptySummary() }; by.set(name, row); }
+    row.count += 1;
+    tally(row, c.accountantResponse, c.appealDecision);
   }
-  return [...by.entries()]
-    .map(([accountant, count]) => ({ accountant, count }))
-    .sort((a, b) => b.count - a.count || a.accountant.localeCompare(b.accountant));
+  return [...by.values()].sort((a, b) => b.count - a.count || a.accountant.localeCompare(b.accountant));
+}
+
+function mapConfirmation(row: any | null | undefined): SonaTicketConfirmation | null {
+  if (!row) return null;
+  return {
+    checkDate: row.check_date,
+    detectedTotal: row.detected_total ?? 0,
+    correctedTotal: row.corrected_total ?? null,
+    confirmationStatus: (row.confirmation_status ?? 'pending') as ConfirmationStatus,
+    confirmedBySona: Boolean(row.confirmed_by_sona),
+    sonaComment: row.sona_comment ?? null,
+    confirmedAt: row.confirmed_at ?? null,
+  };
 }
 
 export async function buildSonaTicketsDaily(date: string): Promise<SonaTicketsDaily> {
-  const { fromIso, toIso } = dayRangeUtc(date, env.tz, env.ticketsCutoffHour);
-  console.log(`[sona-tickets] module=sqa (Sona QA only) day=${date} tz=${env.tz} cutoff=${env.ticketsCutoffHour}:00 range=[${fromIso} .. ${toIso})`);
+  console.log(`[sona-tickets] module=sqa (Sona QA only) day=${date} tz=${env.tz} keyed_on=checking_date`);
 
-  const { data: forms, error } = await supabase
+  const { data: rawRows, error } = await supabase
     .from('sqa_reviews')
-    .select('id, accountant, created_at')
-    .gte('created_at', fromIso)
-    .lt('created_at', toIso)
+    .select('id, accountant, company_agr_no, report_type, record_type, efficiency_pct, comment, reviewer, checking_date, accountant_response_status, sona_appeal_decision')
+    .eq('checking_date', date)
     .limit(5000);
   if (error) throw new Error(`sqa_reviews query failed: ${error.message}`);
 
-  const { count: ticketsCreated, error: tErr } = await supabase
-    .from('sqa_tickets')
-    .select('id', { count: 'exact', head: true })
-    .gte('created_at', fromIso)
-    .lt('created_at', toIso);
-  if (tErr) console.warn(`[sona-tickets] sqa_tickets count failed (non-fatal): ${tErr.message}`);
+  // Exclude AI / Margarita detections (requirements 4 & 5).
+  const rows = ((rawRows ?? []) as ReviewRow[]).filter(isSonaCheck);
+  const reviewIds = rows.map((r) => r.id);
+
+  // Which of these reviews produced an accountant ticket, and its id.
+  const ticketByReview = new Map<string, string>();
+  if (reviewIds.length) {
+    const { data: tickets, error: tErr } = await supabase
+      .from('sqa_tickets').select('id, review_id').in('review_id', reviewIds);
+    if (tErr) console.warn(`[sona-tickets] sqa_tickets lookup failed (non-fatal): ${tErr.message}`);
+    for (const t of tickets ?? []) if (t.review_id) ticketByReview.set(t.review_id, t.id);
+  }
+
+  // Resolve company names for the evidence table (best-effort).
+  const names = new Map<string, string>();
+  const agrNos = [...new Set(rows.map((r) => r.company_agr_no).filter(Boolean))] as string[];
+  if (agrNos.length) {
+    const { data: chats } = await supabase.from('mqa_chats').select('agr_no, name_agr, name_tax').in('agr_no', agrNos);
+    for (const c of chats ?? []) names.set(c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no);
+  }
+
+  const checks: SonaTicketCheck[] = rows.map((r) => ({
+    id: r.id,
+    checkingDate: r.checking_date ?? date,
+    accountant: (r.accountant ?? '').trim() || NO_ACCOUNTANT,
+    companyAgrNo: r.company_agr_no ?? '',
+    companyName: r.company_agr_no ? (names.get(r.company_agr_no) ?? null) : null,
+    reportType: r.report_type ?? null,
+    recordType: r.record_type ?? null,
+    efficiencyPct: r.efficiency_pct ?? null,
+    evidence: r.comment ?? null,
+    reviewer: r.reviewer ?? 'Sona',
+    hasTicket: ticketByReview.has(r.id),
+    ticketId: ticketByReview.get(r.id) ?? null,
+    accountantResponse: normResponse(r.accountant_response_status),
+    appealDecision: normAppeal(r.sona_appeal_decision),
+  }));
+
+  const responses = emptySummary();
+  for (const c of checks) tally(responses, c.accountantResponse, c.appealDecision);
+
+  const { data: confRow } = await supabase
+    .from('sqa_ticket_confirmations').select('*').eq('check_date', date).maybeSingle();
 
   const report: SonaTicketsDaily = {
     date,
-    cutoffHour: env.ticketsCutoffHour,
-    fromIso,
-    toIso,
-    total: (forms ?? []).length,
-    ticketsCreated: ticketsCreated ?? 0,
-    byAccountant: countByAccountant(forms ?? []),
+    total: checks.length,
+    ticketsCreated: [...ticketByReview.keys()].length,
+    byAccountant: summarizeByAccountant(checks),
+    responses,
+    confirmation: mapConfirmation(confRow),
+    checks,
   };
   console.log(
-    `[sona-tickets] found=${report.total} report forms (sqa_reviews), ` +
-    `ticketsCreated=${report.ticketsCreated} (sqa_tickets), accountants=${report.byAccountant.length}`,
+    `[sona-tickets] found=${report.total} checks (sqa_reviews by checking_date), ` +
+    `ticketsCreated=${report.ticketsCreated}, accountants=${report.byAccountant.length}, ` +
+    `confirmation=${report.confirmation?.confirmationStatus ?? 'none'}`,
   );
   return report;
 }
@@ -77,32 +229,40 @@ const ddmmyyyy = (date: string) => {
   return `${d}.${m}.${y}`;
 };
 
+const CONFIRM_LABEL: Record<ConfirmationStatus, string> = {
+  pending: 'ожидает подтверждения',
+  confirmed: '✅ подтверждено Sona',
+  incorrect: '❌ отмечено как неверное',
+  needs_review: '⚠️ требует проверки',
+};
+
 export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
   const lines = [
     `📊 <b>Ежедневный отчёт по тикетам Sona</b>`,
     ``,
-    `Дата: ${ddmmyyyy(r.date)}`,
-  ];
-  if (r.cutoffHour > 0) {
-    // The day closes at the cutoff; show the exact window so Sona's manual
-    // check counts the same period as the bot.
-    const prev = new Date(`${r.date}T12:00:00Z`);
-    prev.setUTCDate(prev.getUTCDate() - 1);
-    const hh = `${String(r.cutoffHour).padStart(2, '0')}:00`;
-    lines.push(`Период: ${ddmmyyyy(prev.toISOString().slice(0, 10))} ${hh} — ${ddmmyyyy(r.date)} ${hh}`);
-  }
-  lines.push(
+    `Дата: ${ddmmyyyy(r.date)} (по дате проверки)`,
     ``,
     `Всего тикетов: <b>${r.total}</b>`,
     `(из них передано бухгалтерам как тикет: ${r.ticketsCreated})`,
     ``,
     `<b>По бухгалтерам:</b>`,
-  );
+  ];
   if (r.byAccountant.length) {
     for (const a of r.byAccountant) lines.push(`• ${a.accountant}: ${a.count}`);
   } else {
     lines.push(`— за день тикетов нет`);
   }
+
+  // Reflect Sona's confirmation state if she already reviewed this day.
+  const c = r.confirmation;
+  if (c && c.confirmationStatus !== 'pending') {
+    lines.push(``, `<b>Подтверждение Sona:</b> ${CONFIRM_LABEL[c.confirmationStatus]}`);
+    if (c.correctedTotal != null && c.correctedTotal !== r.total) {
+      lines.push(`Исправлено Sona: <b>${c.correctedTotal}</b> (бот посчитал ${r.total}).`);
+    }
+    if (c.sonaComment) lines.push(`Комментарий Sona: ${c.sonaComment}`);
+  }
+
   lines.push(
     ``,
     `<b>Проверка точности:</b>`,
@@ -110,18 +270,18 @@ export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
     `Фактически по проверке Sona: ___ тикетов.`,
     `Разница: ___.`,
     ``,
-    `Комментарий:`,
-    `Сравните число бота с реальным количеством у Sona («бот сказал ${r.total}, в реальности сколько было?»). Если числа расходятся — подсчёт нужно проверить вместе с Sona.`,
+    `Подтвердите число в дашборде («Тикеты Sona»): совпадает ли ${r.total} с реальным количеством проверок за день?`,
   );
   return lines.join('\n');
 }
 
-// Public entry point for Render Cron (GET or POST /api/cron/sona-tickets-daily).
-// Optional guard: when CRON_SECRET is set, the caller must pass it as ?token=…
-// or the X-Cron-Secret header. When auth is enabled (REQUIRE_AUTH=true) the
-// endpoint refuses to run without a CRON_SECRET so it can't become an open door.
-// Errors are always caught and answered as JSON — a failing report or Telegram
-// outage must never crash the platform.
+// Public entry point for Render Cron / GitHub Action
+// (GET or POST /api/cron/sona-tickets-daily). Optional guard: when CRON_SECRET
+// is set, the caller must pass it as ?token=… or the X-Cron-Secret header. When
+// auth is enabled (REQUIRE_AUTH=true) the endpoint refuses to run without a
+// CRON_SECRET so it can't become an open door. Errors are always caught and
+// answered as JSON — a failing report or Telegram outage must never crash the
+// platform.
 export async function sonaTicketsDailyCronHandler(req: Request, res: Response) {
   const token = String(req.query.token ?? req.headers['x-cron-secret'] ?? '');
   if (env.cronSecret) {

@@ -58,3 +58,63 @@ export interface SonaComment {
   body: string;
   created_at: string;
 }
+
+// ── Sona daily ticket-checks (shared with the Telegram report) ───────────────
+export type AccountantResponse = 'pending' | 'agreed' | 'appealed';
+export type AppealDecision = 'accepted' | 'rejected' | null;
+export type ConfirmationStatus = 'pending' | 'confirmed' | 'incorrect' | 'needs_review';
+
+export interface ResponseSummary {
+  total: number; agreed: number; appealed: number;
+  appealAccepted: number; appealRejected: number; pending: number;
+}
+export interface AccountantBreakdown extends ResponseSummary { accountant: string; count: number }
+
+export interface SonaTicketCheck {
+  id: string;
+  checkingDate: string;
+  accountant: string;
+  companyAgrNo: string;
+  companyName: string | null;
+  reportType: string | null;
+  recordType: string | null;
+  efficiencyPct: number | null;
+  evidence: string | null;
+  reviewer: string;
+  hasTicket: boolean;
+  ticketId: string | null;
+  accountantResponse: AccountantResponse;
+  appealDecision: AppealDecision;
+}
+export interface SonaTicketConfirmation {
+  checkDate: string;
+  detectedTotal: number;
+  correctedTotal: number | null;
+  confirmationStatus: ConfirmationStatus;
+  confirmedBySona: boolean;
+  sonaComment: string | null;
+  confirmedAt: string | null;
+}
+export interface SonaTicketsDaily {
+  date: string;
+  total: number;
+  ticketsCreated: number;
+  byAccountant: AccountantBreakdown[];
+  responses: ResponseSummary;
+  confirmation: SonaTicketConfirmation | null;
+  checks: SonaTicketCheck[];
+}
+
+export interface AccountantTask {
+  id: string;
+  task_date: string;
+  accountant: string | null;
+  review_id: string | null;
+  ticket_id: string | null;
+  description: string;
+  status: 'open' | 'in_progress' | 'done' | 'cancelled';
+  priority: string | null;
+  source: 'sona_ticket_check' | 'appeal' | 'manual';
+  created_at: string;
+  updated_at: string;
+}

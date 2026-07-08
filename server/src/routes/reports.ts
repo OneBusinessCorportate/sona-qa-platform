@@ -28,10 +28,50 @@ reportsRouter.get('/auditor', async (req: AuthedRequest, res: Response) => {
   res.json(await buildAuditorReport(date, to < date ? date : to));
 });
 
-// Дневной подсчёт тикетов Sona (формы за день + разбивка по бухгалтерам).
+// Дневной подсчёт тикетов Sona (проверки за день + разбивка по бухгалтерам +
+// подтверждение + статусы ответов). Keyed on checking_date — same source of
+// truth as the Telegram report.
 reportsRouter.get('/tickets-daily', async (req: AuthedRequest, res: Response) => {
   try {
     const date = String(req.query.date ?? todayInTz());
+    res.json(await buildSonaTicketsDaily(date));
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'internal_error' });
+  }
+});
+
+// Sona's confirmation of the detected daily count. Body:
+//   { date, confirmation_status: 'confirmed'|'incorrect'|'needs_review'|'pending',
+//     corrected_total?: number, comment?: string }
+// detected_total is recomputed server-side (never trust the client) so the
+// stored figure always matches the shared counter.
+const CONFIRM_STATUSES = ['pending', 'confirmed', 'incorrect', 'needs_review'] as const;
+reportsRouter.put('/tickets-daily/confirm', async (req: AuthedRequest, res: Response) => {
+  try {
+    const date = String(req.body?.date ?? todayInTz());
+    const status = CONFIRM_STATUSES.includes(req.body?.confirmation_status)
+      ? (req.body.confirmation_status as (typeof CONFIRM_STATUSES)[number]) : 'confirmed';
+    const report = await buildSonaTicketsDaily(date);
+    const correctedRaw = req.body?.corrected_total;
+    const corrected_total = correctedRaw === '' || correctedRaw === null || correctedRaw === undefined
+      ? null : Number(correctedRaw);
+    if (corrected_total !== null && !Number.isFinite(corrected_total)) {
+      return res.status(400).json({ error: 'corrected_total_must_be_number' });
+    }
+    const confirmed = status === 'confirmed' || status === 'incorrect';
+    const row = {
+      check_date: date,
+      detected_total: report.total,
+      corrected_total,
+      confirmation_status: status,
+      confirmed_by_sona: confirmed,
+      sona_comment: (req.body?.comment ?? '').toString().trim() || null,
+      confirmed_at: confirmed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('sqa_ticket_confirmations').upsert(row, { onConflict: 'check_date' });
+    if (error) return res.status(500).json({ error: error.message });
     res.json(await buildSonaTicketsDaily(date));
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : 'internal_error' });
