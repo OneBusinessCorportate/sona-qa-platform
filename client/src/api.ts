@@ -23,6 +23,30 @@ export interface Company {
   agr_no: string; name_agr: string | null; name_tax: string | null;
   hvhh: string | null; accountant: string | null; manager: string | null; status: string;
 }
+// ── Companies overview (checked / not-checked mechanism + accountant filter) ──
+export type CompanyCheckStatus = 'checked' | 'not_checked' | 'needs_recheck';
+export interface CompanyOverview {
+  agr_no: string;
+  name: string;
+  name_tax: string | null;
+  accountant: string | null;
+  manager: string | null;
+  company_status: string;
+  status: CompanyCheckStatus;
+  total_checks: number;
+  last_check_date: string | null;
+  last_score: number | null;
+  last_points: number | null;
+  last_report_type: string | null;
+  last_period: string | null;
+  last_comment: string | null;
+  open_tickets: number;
+}
+export interface CompaniesOverview {
+  companies: CompanyOverview[];
+  accountants: string[];
+}
+
 export interface Ticket {
   id: string; company_agr_no: string; accountant: string | null; type: string;
   priority: string; urgent: boolean; status: string; title: string | null;

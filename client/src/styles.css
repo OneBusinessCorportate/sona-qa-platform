@@ -287,3 +287,45 @@ tbody tr:hover { background: #f8fafc; }
 .ticket-attachments { display: flex; flex-direction: column; gap: 4px; }
 .ticket-attachment { font-size: 13px; text-decoration: none; }
 .ticket-attachment:hover { text-decoration: underline; }
+
+/* ── Companies overview (accountant filter + checked/not-checked) ── */
+.co-filters { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.co-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; margin: 0; }
+.co-field > span { font-size: 13px; color: var(--muted); font-weight: 500; }
+.co-field select, .co-field input { width: 100%; }
+.co-search { flex: 2 1 280px; }
+
+/* Counter tiles — double as status filters */
+.co-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.co-tile {
+  background: #f8fafc; border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 12px; text-align: center; cursor: pointer; display: flex;
+  flex-direction: column; gap: 4px; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.co-tile:hover { background: #f1f5f9; }
+.co-tile-value { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+.co-tile-label { font-size: 12px; color: var(--muted); }
+.co-tile.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.12); background: #fff; }
+.co-tile.t-checked .co-tile-value { color: var(--success); }
+.co-tile.t-none .co-tile-value { color: var(--muted); }
+.co-tile.t-recheck .co-tile-value { color: var(--danger); }
+
+/* Status badges */
+.co-badge.st-checked { background: #dcfce7; color: #15803d; }
+.co-badge.st-none { background: #f1f5f9; color: var(--muted); }
+.co-badge.st-recheck { background: #fee2e2; color: var(--danger); }
+
+/* Table */
+.co-table { min-width: 760px; }
+.co-row { cursor: pointer; }
+.co-name { font-weight: 600; }
+.co-sub { font-size: 11.5px; margin-top: 2px; }
+.co-detail-row > td { background: #f8fafc; padding: 6px 12px 14px; }
+.co-checks { width: 100%; font-size: 13px; margin-top: 4px; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.co-checks th { font-size: 10.5px; }
+.co-checks th, .co-checks td { padding: 8px 10px; }
+.co-comment { max-width: 340px; white-space: pre-wrap; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .co-tiles { grid-template-columns: repeat(2, 1fr); }
+}
