@@ -325,6 +325,7 @@ tbody tr:hover { background: #f8fafc; }
 .co-checks th { font-size: 10.5px; }
 .co-checks th, .co-checks td { padding: 8px 10px; }
 .co-comment { max-width: 340px; white-space: pre-wrap; color: var(--muted); }
+.co-check-btn { white-space: nowrap; font-size: 12px; padding: 6px 12px; }
 
 @media (max-width: 720px) {
   .co-tiles { grid-template-columns: repeat(2, 1fr); }

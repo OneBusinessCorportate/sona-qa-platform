@@ -32,7 +32,7 @@ interface CheckRow {
   comment: string | null;
 }
 
-export function Companies() {
+export function Companies({ active, onCheck }: { active: boolean; onCheck: (agrNo: string) => void }) {
   const [data, setData] = useState<CompaniesOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -53,7 +53,9 @@ export function Companies() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  // Reload whenever the tab is opened, so counters/statuses reflect any checks
+  // Sona just created (e.g. via the "Проверить" button → check form → back).
+  useEffect(() => { if (active) load(); }, [active]);
 
   // Companies of the selected accountant (or all) — the base for counters.
   const byAcc = useMemo(() => {
@@ -155,6 +157,7 @@ export function Companies() {
                   <th>Посл. проверка</th>
                   <th>Оценка</th>
                   <th>Проверок</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -179,10 +182,19 @@ export function Companies() {
                         <td>{fmtDate(c.last_check_date)}</td>
                         <td>{pct(c.last_score)}{c.last_points != null ? <span className="muted small"> · {c.last_points} б.</span> : null}</td>
                         <td>{c.total_checks}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-soft co-check-btn"
+                            onClick={(e) => { e.stopPropagation(); onCheck(c.agr_no); }}
+                          >
+                            {c.total_checks > 0 ? 'Проверить ещё' : 'Проверить'}
+                          </button>
+                        </td>
                       </tr>
                       {isOpen && (
                         <tr className="co-detail-row">
-                          <td colSpan={7}>
+                          <td colSpan={8}>
                             {c.total_checks === 0 && <div className="muted small">Компания ещё не проверялась.</div>}
                             {rowChecks === 'loading' && <div className="muted small">Загрузка проверок…</div>}
                             {Array.isArray(rowChecks) && rowChecks.length > 0 && (
@@ -215,7 +227,7 @@ export function Companies() {
                   );
                 })}
                 {visible.length === 0 && (
-                  <tr><td colSpan={7} className="muted small" style={{ padding: '18px 12px' }}>Ничего не найдено.</td></tr>
+                  <tr><td colSpan={8} className="muted small" style={{ padding: '18px 12px' }}>Ничего не найдено.</td></tr>
                 )}
               </tbody>
             </table>

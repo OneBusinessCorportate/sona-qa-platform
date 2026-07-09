@@ -64,7 +64,7 @@ type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; no
 const fmtAmount = (n: number) => n.toLocaleString('ru-RU');
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function SonaForm() {
+export function SonaForm({ presetCompany, onPresetConsumed }: { presetCompany?: string; onPresetConsumed?: () => void } = {}) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [agrNo, setAgrNo] = useState('');
   const [accountant, setAccountant] = useState('');
@@ -94,6 +94,17 @@ export function SonaForm() {
       ))
       .catch(() => {});
   }, []);
+
+  // When another tab (e.g. «Компании») asks to check a specific company, jump
+  // straight to it: preselect the company and clear any half-filled form.
+  useEffect(() => {
+    if (!presetCompany) return;
+    setAgrNo(presetCompany);
+    reset();
+    setMsg(null);
+    onPresetConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetCompany]);
 
   const selected = useMemo(() => companies.find((c) => c.agr_no === agrNo), [companies, agrNo]);
 

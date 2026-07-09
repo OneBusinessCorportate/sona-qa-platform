@@ -11,6 +11,13 @@ type Tab = 'form' | 'companies' | 'report' | 'sonatickets' | 'efficiency' | 'tic
 
 export function App() {
   const [tab, setTab] = useState<Tab>('form');
+  // Company handed off from the «Компании» tab to the check form.
+  const [checkCompany, setCheckCompany] = useState('');
+
+  function startCheck(agrNo: string) {
+    setCheckCompany(agrNo);
+    setTab('form');
+  }
 
   return (
     <div className="app">
@@ -27,8 +34,12 @@ export function App() {
         </nav>
       </header>
       <main className={`content${tab === 'tickets' || tab === 'companies' ? ' content--wide' : ''}`}>
-        <div style={tab !== 'form' ? { display: 'none' } : undefined}><SonaForm /></div>
-        <div style={tab !== 'companies' ? { display: 'none' } : undefined}><Companies /></div>
+        <div style={tab !== 'form' ? { display: 'none' } : undefined}>
+          <SonaForm presetCompany={checkCompany} onPresetConsumed={() => setCheckCompany('')} />
+        </div>
+        <div style={tab !== 'companies' ? { display: 'none' } : undefined}>
+          <Companies active={tab === 'companies'} onCheck={startCheck} />
+        </div>
         <div style={tab !== 'report' ? { display: 'none' } : undefined}><SonaReport /></div>
         <div style={tab !== 'sonatickets' ? { display: 'none' } : undefined}><SonaTickets /></div>
         <div style={tab !== 'efficiency' ? { display: 'none' } : undefined}><Efficiency /></div>
