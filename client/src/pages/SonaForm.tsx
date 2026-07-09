@@ -17,7 +17,7 @@ const RISK_LEVELS = [
 
 // 9-point Yes/No checklist (mirror of server/src/efficiency.ts).
 // Оценка % = good answers / 9 * 100. `good` = the answer that scores a point.
-const CHECKLIST: Array<{ id: string; label: string; good: 'yes' | 'no' }> = [
+export const CHECKLIST: Array<{ id: string; label: string; good: 'yes' | 'no' }> = [
   { id: 'overdue',    label: 'Есть просрочка',                     good: 'no'  },
   { id: 'signed',     label: 'Счета подписаны',                    good: 'yes' },
   { id: 'correct',    label: 'Корректность и полнота',             good: 'yes' },
@@ -28,15 +28,15 @@ const CHECKLIST: Array<{ id: string; label: string; good: 'yes' | 'no' }> = [
   { id: 'penalties',  label: 'Штрафы / уведомления',               good: 'no'  },
   { id: 'standards',  label: 'Внутренние стандарты',               good: 'yes' },
 ];
-type Checklist = Record<string, 'yes' | 'no'>;
-const defaultChecklist = (): Checklist => Object.fromEntries(CHECKLIST.map((c) => [c.id, c.good])) as Checklist;
-function checklistScore(c: Checklist): number {
+export type Checklist = Record<string, 'yes' | 'no'>;
+export const defaultChecklist = (): Checklist => Object.fromEntries(CHECKLIST.map((c) => [c.id, c.good])) as Checklist;
+export function checklistScore(c: Checklist): number {
   const good = CHECKLIST.reduce((n, item) => n + (c[item.id] === item.good ? 1 : 0), 0);
   return Math.round((good / CHECKLIST.length) * 10000) / 100;
 }
 const effBand = (v: number) => (v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
 // Баллы: Sona's 0–20 banding of the percentage (mirror of server/src/efficiency.ts scoreBand).
-const scoreBand = (pct: number) => (pct >= 95 ? 20 : pct >= 75 ? 15 : pct >= 60 ? 10 : pct >= 40 ? 5 : 0);
+export const scoreBand = (pct: number) => (pct >= 95 ? 20 : pct >= 75 ? 15 : pct >= 60 ? 10 : pct >= 40 ? 5 : 0);
 
 // Three review-stage comments mirrored on the server (scores.comments).
 const COMMENT_FIELDS: Array<{ id: 'before' | 'work' | 'after'; label: string; placeholder: string }> = [
