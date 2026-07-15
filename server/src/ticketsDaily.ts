@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { env } from './env.js';
 import { supabase } from './supabase.js';
 import { sendReport } from './telegram.js';
+import { getCompanyNameMap } from './companies.js';
 import { todayInTz } from './time.js';
 
 // Ежедневный подсчёт тикетов/проверок Sona — single source of truth shared by
@@ -177,12 +178,8 @@ export async function buildSonaTicketsDaily(date: string): Promise<SonaTicketsDa
   }
 
   // Resolve company names for the evidence table (best-effort).
-  const names = new Map<string, string>();
   const agrNos = [...new Set(rows.map((r) => r.company_agr_no).filter(Boolean))] as string[];
-  if (agrNos.length) {
-    const { data: chats } = await supabase.from('mqa_chats').select('agr_no, name_agr, name_tax').in('agr_no', agrNos);
-    for (const c of chats ?? []) names.set(c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no);
-  }
+  const names = agrNos.length ? await getCompanyNameMap(agrNos) : new Map<string, string>();
 
   const checks: SonaTicketCheck[] = rows.map((r) => ({
     id: r.id,

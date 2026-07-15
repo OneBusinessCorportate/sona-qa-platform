@@ -41,6 +41,16 @@ export const env = {
   // Optional shared secret for the public /api/cron/* endpoints (Render Cron).
   cronSecret: process.env.CRON_SECRET ?? '',
   tz: process.env.TZ ?? 'Asia/Yerevan',
+
+  // Company reference — live Google Sheets sync (Наири's master "Agreements"
+  // sheet). Defaults point at that sheet; its CSV export must be link-readable.
+  googleSheetId: process.env.GOOGLE_SHEET_ID ?? '1HEy3QVrl-gFUtPAnPRpnKp7ZYEHtksgRBXb5PbtE514',
+  googleSheetGid: process.env.GOOGLE_SHEET_GID ?? '569387782',
+  // 'sheet' (default) pulls companies live from Google Sheets; 'supabase'
+  // reverts to the shared mqa_chats reference table.
+  companiesSource: (process.env.COMPANIES_SOURCE ?? 'sheet') as 'sheet' | 'supabase',
+  // How long a fetched sheet snapshot is served before the next refresh.
+  companiesCacheTtlMs: Number(process.env.COMPANIES_CACHE_TTL_MS ?? 5 * 60 * 1000),
 };
 
 export const telegramConfigured = () => Boolean(env.telegramBotToken && env.telegramChatId);

@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js';
+import { getCompanyNameMap } from './companies.js';
 import {
   reviewToCriteria, averageCriteria, itogQ, scorecardLevel,
   type Criteria,
@@ -81,11 +82,7 @@ export async function buildDailyReport(date: string, dateTo: string = date): Pro
   const reviews = rows ?? [];
 
   const agrNos = [...new Set(reviews.map((r) => r.company_agr_no).filter(Boolean))] as string[];
-  const names = new Map<string, string>();
-  if (agrNos.length) {
-    const { data: chats } = await supabase.from('mqa_chats').select('agr_no, name_agr, name_tax').in('agr_no', agrNos);
-    for (const c of chats ?? []) names.set(c.agr_no, c.name_agr ?? c.name_tax ?? c.agr_no);
-  }
+  const names = agrNos.length ? await getCompanyNameMap(agrNos) : new Map<string, string>();
   const coFinance = financeByCompany(reviews, names);
 
   const byAccMap = new Map<string, typeof reviews>();

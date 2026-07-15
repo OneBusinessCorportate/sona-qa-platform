@@ -1,34 +1,56 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
+import {
+  getCompanies, getCompany, refreshCompanies, companiesSourceStatus,
+} from '../companies.js';
 
 export const companiesRouter = Router();
 companiesRouter.use(requireAuth);
 
-// Company dropdown source — reuses Margarita's shared reference table mqa_chats.
+// Company dropdown source — pulled live from Наири's Google Sheet (see
+// ../companies.ts), with a Supabase mqa_chats fallback.
 companiesRouter.get('/', async (req: AuthedRequest, res: Response) => {
-  const activeOnly = req.query.active !== '0';
-  let q = supabase
-    .from('mqa_chats')
-    .select('agr_no, name_agr, name_tax, hvhh, accountant, manager, status')
-    .order('name_agr', { ascending: true })
-    .limit(5000); // explicit cap so the full list is returned (Supabase default is 1000)
-  if (activeOnly) q = q.eq('status', 'Active');
-  const { data, error } = await q;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ companies: data ?? [] });
+  try {
+    const activeOnly = req.query.active !== '0';
+    let list = await getCompanies();
+    if (activeOnly) list = list.filter((c) => c.status === 'Active');
+    const companies = [...list]
+      .sort((a, b) => (a.name_agr ?? '').localeCompare(b.name_agr ?? ''))
+      .map((c) => ({
+        agr_no: c.agr_no, name_agr: c.name_agr, name_tax: c.name_tax,
+        hvhh: c.hvhh, accountant: c.accountant, manager: c.manager, status: c.status,
+      }));
+    res.json({ companies });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'companies_failed' });
+  }
+});
+
+// Live-sync diagnostics (source, cached row count, last fetch time) — no secrets.
+companiesRouter.get('/meta/source', (_req: AuthedRequest, res: Response) => {
+  res.json(companiesSourceStatus());
+});
+
+// Force a re-pull of the sheet now, ignoring the cache TTL.
+companiesRouter.post('/meta/refresh', async (_req: AuthedRequest, res: Response) => {
+  try {
+    const list = await refreshCompanies();
+    res.json({ ok: true, ...companiesSourceStatus(), count: list.length });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'refresh_failed' });
+  }
 });
 
 // Single company → used to auto-fill accountant / manager when one is picked.
 companiesRouter.get('/:agrNo', async (req: AuthedRequest, res: Response) => {
-  const { data, error } = await supabase
-    .from('mqa_chats')
-    .select('agr_no, name_agr, name_tax, hvhh, accountant, manager, status, debts, tax_activation_date')
-    .eq('agr_no', req.params.agrNo)
-    .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
-  if (!data) return res.status(404).json({ error: 'not_found' });
-  res.json({ company: data });
+  try {
+    const c = await getCompany(req.params.agrNo);
+    if (!c) return res.status(404).json({ error: 'not_found' });
+    res.json({ company: c });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'company_failed' });
+  }
 });
 
 // Companies overview for Sona: every company with its check status
@@ -41,11 +63,8 @@ companiesRouter.get('/:agrNo', async (req: AuthedRequest, res: Response) => {
 // Everything is small (sqa_reviews ~ hundreds, sqa_tickets ~ tens), so we pull
 // the tables once and aggregate in memory.
 companiesRouter.get('/meta/overview', async (_req: AuthedRequest, res: Response) => {
-  const [companiesRes, reviewsRes, ticketsRes] = await Promise.all([
-    supabase
-      .from('mqa_chats')
-      .select('agr_no, name_agr, name_tax, hvhh, accountant, manager, status')
-      .limit(5000),
+  const [companiesList, reviewsRes, ticketsRes] = await Promise.all([
+    getCompanies(),
     supabase
       .from('sqa_reviews')
       .select('company_agr_no, accountant, checking_date, efficiency_pct, record_type, report_type, period, comment, scores, created_at')
@@ -56,7 +75,6 @@ companiesRouter.get('/meta/overview', async (_req: AuthedRequest, res: Response)
       .select('company_agr_no, status')
       .eq('status', 'open'),
   ]);
-  if (companiesRes.error) return res.status(500).json({ error: companiesRes.error.message });
   if (reviewsRes.error) return res.status(500).json({ error: reviewsRes.error.message });
   if (ticketsRes.error) return res.status(500).json({ error: ticketsRes.error.message });
 
@@ -83,7 +101,7 @@ companiesRouter.get('/meta/overview', async (_req: AuthedRequest, res: Response)
 
   // Build the base company map.
   const coMap = new Map<string, any>();
-  for (const c of companiesRes.data ?? []) {
+  for (const c of companiesList) {
     if (c.status === 'Active' || reviewsByCo.has(c.agr_no)) coMap.set(c.agr_no, c);
   }
   // Include any reviewed company that is (unexpectedly) not in mqa_chats.

@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { computeScore, scoreBand } from '../efficiency.js';
 import { normalizeComments, combineComments } from '../comments.js';
+import { getCompany } from '../companies.js';
 
 export const reviewsRouter = Router();
 reviewsRouter.use(requireAuth);
@@ -49,11 +50,7 @@ reviewsRouter.post('/', async (req: AuthedRequest, res: Response) => {
   let accountant = b.accountant ?? null;
   let manager = b.manager ?? null;
   if (!accountant || !manager) {
-    const { data: company } = await supabase
-      .from('mqa_chats')
-      .select('accountant, manager')
-      .eq('agr_no', b.company_agr_no)
-      .maybeSingle();
+    const company = await getCompany(b.company_agr_no);
     accountant = accountant ?? company?.accountant ?? null;
     manager = manager ?? company?.manager ?? null;
   }
@@ -120,7 +117,7 @@ reviewsRouter.patch('/:id', async (req: AuthedRequest, res: Response) => {
   }
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'no_fields' });
   if (patch.company_agr_no) {
-    const { data: co } = await supabase.from('mqa_chats').select('accountant, manager').eq('agr_no', patch.company_agr_no).maybeSingle();
+    const co = await getCompany(patch.company_agr_no);
     if (co) { patch.accountant = co.accountant ?? null; patch.manager = co.manager ?? null; }
   }
   const { data, error } = await supabase.from('sqa_reviews').update(patch).eq('id', req.params.id).select().single();
