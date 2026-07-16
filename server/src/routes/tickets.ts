@@ -50,7 +50,10 @@ ticketsRouter.delete('/:id', async (req: AuthedRequest, res: Response) => {
 // Aggregated feed of everything accountants sent back on Sona's tickets —
 // feedback forms, thread comments, attachments — grouped per ticket and
 // sorted by latest activity, so nothing requires expanding tickets one by one.
-ticketsRouter.get('/feed', async (_req: AuthedRequest, res: Response) => {
+ticketsRouter.get('/feed', async (req: AuthedRequest, res: Response) => {
+  // By default only live conversations are shown. `?closed=1` also returns
+  // resolved cases so Sona can review responses she has already handled.
+  const includeClosed = req.query.closed === '1';
   const [{ data: fb }, { data: cm }, { data: at }] = await Promise.all([
     supabase
       .from('kk_accountant_feedback')
@@ -84,7 +87,9 @@ ticketsRouter.get('/feed', async (_req: AuthedRequest, res: Response) => {
   // A closed case («Закрыть» / resolved on the kk side) disappears from the
   // feed entirely — only live conversations stay visible.
   const CLOSED = new Set(['explained_accepted', 'fixed', 'auto_resolved']);
-  const openIds = ids.filter((id) => !CLOSED.has(pMap.get(id)?.status ?? ''));
+  const openIds = includeClosed
+    ? ids
+    : ids.filter((id) => !CLOSED.has(pMap.get(id)?.status ?? ''));
 
   const items = openIds.map((problemId) => {
     const p = pMap.get(problemId);

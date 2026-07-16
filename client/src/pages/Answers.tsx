@@ -33,19 +33,20 @@ interface FeedItem {
 export function Answers() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showClosed, setShowClosed] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [posting, setPosting] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const r = await api<{ items: FeedItem[] }>('/tickets/feed');
+      const r = await api<{ items: FeedItem[] }>(`/tickets/feed${showClosed ? '?closed=1' : ''}`);
       setItems(r.items);
     } finally {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showClosed]);
 
   async function reply(ticketId: string) {
     const body = (drafts[ticketId] ?? '').trim();
@@ -80,10 +81,20 @@ export function Answers() {
       <div className="card">
         <div className="report-head">
           <h2>💬 Ответы бухгалтеров</h2>
-          <button className="btn-soft" onClick={load} disabled={loading}>{loading ? 'Загрузка…' : 'Обновить'}</button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="muted small" style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+              Показать закрытые
+            </label>
+            <button className="btn-soft" onClick={load} disabled={loading}>{loading ? 'Загрузка…' : 'Обновить'}</button>
+          </div>
         </div>
         {!loading && items.length === 0 && (
-          <p className="muted">Бухгалтеры пока ничего не отправляли по вашим замечаниям.</p>
+          <p className="muted">
+            {showClosed
+              ? 'Бухгалтеры пока ничего не отправляли по вашим замечаниям.'
+              : 'Нет открытых ответов. Все ответы бухгалтеров обработаны — включите «Показать закрытые», чтобы посмотреть их.'}
+          </p>
         )}
       </div>
 
