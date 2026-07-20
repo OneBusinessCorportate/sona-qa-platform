@@ -64,7 +64,7 @@ type FinLine = { kind: 'income' | 'expense'; section: string; amount: string; no
 const fmtAmount = (n: number) => n.toLocaleString('ru-RU');
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function SonaForm({ presetCompany, onPresetConsumed }: { presetCompany?: string; onPresetConsumed?: () => void } = {}) {
+export function SonaForm({ presetCompany, onPresetConsumed, onReviewSaved }: { presetCompany?: string; onPresetConsumed?: () => void; onReviewSaved?: () => void } = {}) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [agrNo, setAgrNo] = useState('');
   const [accountant, setAccountant] = useState('');
@@ -180,6 +180,7 @@ export function SonaForm({ presetCompany, onPresetConsumed }: { presetCompany?: 
       });
       setMsg({ kind: 'ok', text: res.ticket ? 'Сохранено. Создан тикет.' : 'Сохранено.' });
       reset();
+      onReviewSaved?.();
     } catch (err) {
       setMsg({ kind: 'err', text: 'Ошибка: ' + (err instanceof Error ? err.message : 'unknown') });
     } finally {

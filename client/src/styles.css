@@ -380,3 +380,31 @@ tbody tr:hover { background: #f8fafc; }
 @media (max-width: 720px) {
   .co-tiles { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Platform-improvement survey modal («Что улучшить в платформе») */
+.btn-ghost { background: transparent; color: var(--muted); border: none; border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn-ghost:hover { background: #f1f5f9; color: var(--text); }
+.btn-primary-sm { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn-primary-sm:hover { background: var(--primary-dark); }
+.btn-primary-sm:disabled { opacity: .5; cursor: default; }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(15, 23, 42, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; animation: modal-fade .15s ease-out;
+}
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+.modal-card { width: 100%; max-width: 480px; margin: 0; max-height: 90vh; overflow-y: auto; }
+.modal-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line);
+}
+.ease-scale { display: flex; gap: 8px; }
+.ease-btn {
+  flex: 1; height: 44px; border: 1px solid var(--line); background: #fff;
+  border-radius: 10px; cursor: pointer; font-size: 15px; font-weight: 700; color: var(--muted);
+}
+.ease-btn:hover { border-color: var(--primary); color: var(--primary); }
+.ease-btn.active { background: #eff4ff; border-color: var(--primary); color: var(--primary); }
+.ease-legend { display: flex; justify-content: space-between; margin-top: 6px; }
