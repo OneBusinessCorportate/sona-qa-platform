@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, type TicketAppeal } from '../api';
 
 // Aggregated feed of accountant responses: every feedback form, comment and
 // attachment sent back on Sona's tickets, newest activity first — no need to
@@ -10,10 +10,19 @@ const KK_STATUS_LABEL: Record<string, string> = {
   waiting_for_accountant: 'Ждёт бухгалтера',
   submitted_by_accountant: 'Отправлена бухгалтером',
   in_review: 'На проверке',
+  acknowledged: 'Ознакомлен',
+  appeal_pending: 'Апелляция на рассмотрении',
+  appeal_approved: 'Апелляция одобрена',
+  appeal_rejected: 'Апелляция отклонена',
   fixed: 'Исправлено',
   explained_accepted: 'Объяснено / принято',
   returned_to_accountant: 'Возвращена бухгалтеру',
   auto_resolved: 'Снято автоматически',
+};
+const APPEAL_STATUS_LABEL: Record<string, string> = {
+  pending: 'На рассмотрении',
+  approved: 'Одобрена',
+  rejected: 'Отклонена',
 };
 const fmtDateTime = (d: string) => new Date(d).toLocaleString('ru-RU');
 
@@ -27,6 +36,7 @@ interface FeedItem {
   feedbacks: Array<{ situation_comment: string; solution_comment: string; submitted_at: string; accountant_name: string | null }>;
   comments: Array<{ author: string; body: string; created_at: string }>;
   attachments: Array<{ file_name: string; public_url: string; mime_type: string | null; uploaded_by: string | null }>;
+  appeals: TicketAppeal[];
   last_activity: string | null;
 }
 
@@ -54,6 +64,23 @@ export function Answers() {
     setPosting(ticketId);
     try {
       await api(`/tickets/${ticketId}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+      setDrafts((d) => ({ ...d, [ticketId]: '' }));
+      await load();
+    } finally {
+      setPosting(null);
+    }
+  }
+
+  // Sona's decision on an accountant's appeal against her ticket. The comment
+  // (optional) explains the verdict and is delivered to the accountant.
+  async function resolveAppeal(ticketId: string, decision: 'approved' | 'rejected') {
+    const comment = (drafts[ticketId] ?? '').trim();
+    setPosting(ticketId);
+    try {
+      await api(`/tickets/${ticketId}/appeal/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, comment }),
+      });
       setDrafts((d) => ({ ...d, [ticketId]: '' }));
       await load();
     } finally {
@@ -137,6 +164,52 @@ export function Answers() {
                   </a>
                 ))}
               </div>
+            </div>
+          )}
+
+          {it.appeals.length > 0 && (
+            <div className="ticket-feedback-block">
+              <div className="ticket-feedback-label">Апелляции бухгалтера</div>
+              {it.appeals.map((ap) => {
+                const isPending = ap.status === 'pending';
+                return (
+                  <div key={ap.id} className="ticket-appeal-item" style={{ marginTop: 8 }}>
+                    <div className="muted small" style={{ marginBottom: 2 }}>
+                      {ap.accountant_name ?? '—'} · {fmtDateTime(ap.created_at)} ·{' '}
+                      <b>{APPEAL_STATUS_LABEL[ap.status] ?? ap.status}</b>
+                    </div>
+                    <div className="ticket-feedback-text">{ap.comment}</div>
+                    {!isPending && ap.resolution_comment && (
+                      <div className="muted small" style={{ marginTop: 2 }}>
+                        Решение: {ap.resolution_comment}
+                      </div>
+                    )}
+                    {isPending && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                        <button
+                          className="btn-soft"
+                          title="Апелляция принята — замечание снимается, штраф аннулируется"
+                          disabled={posting === it.ticket_id}
+                          onClick={() => resolveAppeal(it.ticket_id, 'approved')}
+                        >
+                          ✓ Принять апелляцию
+                        </button>
+                        <button
+                          className="btn-soft"
+                          title="Апелляция отклонена — замечание остаётся, возвращается бухгалтеру"
+                          disabled={posting === it.ticket_id}
+                          onClick={() => resolveAppeal(it.ticket_id, 'rejected')}
+                        >
+                          ✕ Отклонить апелляцию
+                        </button>
+                        <span className="muted small" style={{ alignSelf: 'center' }}>
+                          Комментарий ниже уйдёт бухгалтеру вместе с решением.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
