@@ -6,6 +6,7 @@ import { Companies } from './pages/Companies';
 import { Efficiency } from './pages/Efficiency';
 import { Tickets } from './pages/Tickets';
 import { Answers } from './pages/Answers';
+import { PlatformSurveyGate } from './pages/PlatformSurvey';
 
 type Tab = 'form' | 'companies' | 'report' | 'sonatickets' | 'efficiency' | 'tickets' | 'answers';
 
@@ -13,6 +14,9 @@ export function App() {
   const [tab, setTab] = useState<Tab>('form');
   // Company handed off from the «Компании» tab to the check form.
   const [checkCompany, setCheckCompany] = useState('');
+  // Bumped after each saved review so the survey gate re-checks whether the
+  // 3rd-check-of-the-day threshold has just been reached.
+  const [reviewBump, setReviewBump] = useState(0);
 
   function startCheck(agrNo: string) {
     setCheckCompany(agrNo);
@@ -35,7 +39,11 @@ export function App() {
       </header>
       <main className={`content${tab === 'tickets' || tab === 'companies' ? ' content--wide' : ''}`}>
         <div style={tab !== 'form' ? { display: 'none' } : undefined}>
-          <SonaForm presetCompany={checkCompany} onPresetConsumed={() => setCheckCompany('')} />
+          <SonaForm
+            presetCompany={checkCompany}
+            onPresetConsumed={() => setCheckCompany('')}
+            onReviewSaved={() => setReviewBump((n) => n + 1)}
+          />
         </div>
         <div style={tab !== 'companies' ? { display: 'none' } : undefined}>
           <Companies active={tab === 'companies'} onCheck={startCheck} />
@@ -46,6 +54,7 @@ export function App() {
         <div style={tab !== 'tickets' ? { display: 'none' } : undefined}><Tickets /></div>
         <div style={tab !== 'answers' ? { display: 'none' } : undefined}><Answers /></div>
       </main>
+      <PlatformSurveyGate bump={reviewBump} />
     </div>
   );
 }
