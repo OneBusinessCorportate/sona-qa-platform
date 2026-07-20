@@ -64,6 +64,21 @@ export interface TicketFeedback {
   reviewer_name: string | null;
   review_acted_at: string | null;
   attachments?: TicketAttachment[];
+  appeals?: TicketAppeal[];
+}
+
+// An accountant's appeal («Подать апелляцию») against a Sona ticket, read from
+// the kk-accountants app. status: 'pending' | 'approved' | 'rejected'.
+export interface TicketAppeal {
+  id: string;
+  problem_id: string;
+  status: string;
+  comment: string | null;
+  accountant_name: string | null;
+  resolved_by: string | null;
+  resolution_comment: string | null;
+  created_at: string;
+  resolved_at: string | null;
 }
 
 export interface TicketAttachment {

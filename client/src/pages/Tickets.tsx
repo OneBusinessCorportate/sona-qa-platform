@@ -11,10 +11,19 @@ const KK_STATUS_LABEL: Record<string, string> = {
   waiting_for_accountant: 'Ждёт бухгалтера',
   submitted_by_accountant: 'Отправлена бухгалтером',
   in_review: 'На проверке',
+  acknowledged: 'Ознакомлен',
+  appeal_pending: 'Апелляция на рассмотрении',
+  appeal_approved: 'Апелляция одобрена',
+  appeal_rejected: 'Апелляция отклонена',
   fixed: 'Исправлено',
   explained_accepted: 'Объяснено / принято',
   returned_to_accountant: 'Возвращена бухгалтеру',
   auto_resolved: 'Снято автоматически',
+};
+const APPEAL_STATUS_LABEL: Record<string, string> = {
+  pending: 'На рассмотрении',
+  approved: 'Одобрена',
+  rejected: 'Отклонена',
 };
 const KK_ACTION_LABEL: Record<string, string> = {
   fixed: 'Исправлено',
@@ -95,6 +104,29 @@ export function Tickets() {
       await api(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
       setCommentDraft('');
       await refreshComments(id);
+    } finally {
+      setCommentBusy(false);
+    }
+  }
+
+  // Rule on the accountant's pending appeal. The current comment draft (if any)
+  // is delivered to the accountant as the verdict explanation.
+  async function resolveAppeal(id: string, decision: 'approved' | 'rejected') {
+    setCommentBusy(true);
+    try {
+      await api(`/tickets/${id}/appeal/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, comment: commentDraft.trim() }),
+      });
+      setCommentDraft('');
+      // Reload feedback (status + appeal state) and the comment thread.
+      setFeedbackCache((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await loadFeedback(id);
+      load();
     } finally {
       setCommentBusy(false);
     }
@@ -338,6 +370,55 @@ export function Tickets() {
                               </div>
                             )}
                           </>
+                        )}
+
+                        {/* ── Accountant appeals ── */}
+                        {(cached?.feedback?.appeals?.length ?? 0) > 0 && (
+                          <div className="ticket-feedback-block">
+                            <div className="ticket-feedback-label">Апелляции бухгалтера</div>
+                            {cached!.feedback!.appeals!.map((ap) => {
+                              const isPending = ap.status === 'pending';
+                              return (
+                                <div key={ap.id} className="ticket-appeal-item" style={{ marginTop: 8 }}>
+                                  <div className="muted small" style={{ marginBottom: 2 }}>
+                                    {ap.accountant_name ?? '—'} · {fmtDateTime(ap.created_at)} ·{' '}
+                                    <b>{APPEAL_STATUS_LABEL[ap.status] ?? ap.status}</b>
+                                  </div>
+                                  <div className="ticket-feedback-text">{ap.comment}</div>
+                                  {!isPending && ap.resolution_comment && (
+                                    <div className="muted small" style={{ marginTop: 2 }}>
+                                      Решение: {ap.resolution_comment}
+                                    </div>
+                                  )}
+                                  {isPending && (
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        className="btn-soft"
+                                        title="Апелляция принята — замечание снимается, штраф аннулируется"
+                                        disabled={commentBusy}
+                                        onClick={() => resolveAppeal(t.id, 'approved')}
+                                      >
+                                        ✓ Принять апелляцию
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-soft"
+                                        title="Апелляция отклонена — замечание остаётся, возвращается бухгалтеру"
+                                        disabled={commentBusy}
+                                        onClick={() => resolveAppeal(t.id, 'rejected')}
+                                      >
+                                        ✕ Отклонить апелляцию
+                                      </button>
+                                      <span className="muted small" style={{ alignSelf: 'center' }}>
+                                        Комментарий ниже уйдёт бухгалтеру с решением.
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
 
                         {/* ── Comment thread ── */}

@@ -1,6 +1,20 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
+import {
+  parseDecision,
+  pendingAppeal,
+  isOpenFeedItem,
+  buildAppealResolution,
+  ANON_REVIEWER,
+  type AppealRow,
+} from '../appeals.js';
+
+// Columns of kk_problem_appeals we surface to Sona (accountant name + the
+// dispute text + Sona's own past decision). Selected once, reused by feed +
+// per-ticket views.
+const APPEAL_COLUMNS =
+  'id, problem_id, status, comment, accountant_name, resolved_by, resolution_comment, created_at, resolved_at';
 
 export const ticketsRouter = Router();
 ticketsRouter.use(requireAuth);
@@ -54,7 +68,7 @@ ticketsRouter.get('/feed', async (req: AuthedRequest, res: Response) => {
   // By default only live conversations are shown. `?closed=1` also returns
   // resolved cases so Sona can review responses she has already handled.
   const includeClosed = req.query.closed === '1';
-  const [{ data: fb }, { data: cm }, { data: at }] = await Promise.all([
+  const [{ data: fb }, { data: cm }, { data: at }, { data: ap }] = await Promise.all([
     supabase
       .from('kk_accountant_feedback')
       .select('problem_id, situation_comment, solution_comment, submitted_at, accountant_name')
@@ -73,9 +87,22 @@ ticketsRouter.get('/feed', async (req: AuthedRequest, res: Response) => {
       .like('problem_id', 'sona:%')
       .order('created_at', { ascending: false })
       .limit(500),
+    // Appeals accountants filed against Sona's tickets («Подать апелляцию»).
+    supabase
+      .from('kk_problem_appeals')
+      .select(APPEAL_COLUMNS)
+      .like('problem_id', 'sona:%')
+      .order('created_at', { ascending: false })
+      .limit(500),
   ]);
 
-  const ids = [...new Set([...(fb ?? []), ...(cm ?? []), ...(at ?? [])].map((r) => r.problem_id))];
+  // An appeal-only ticket (disputed but no feedback form / comment yet) must
+  // still surface, so appeal problem_ids join the id set.
+  const ids = [
+    ...new Set(
+      [...(fb ?? []), ...(cm ?? []), ...(at ?? []), ...(ap ?? [])].map((r) => r.problem_id),
+    ),
+  ];
   if (!ids.length) return res.json({ items: [] });
 
   const { data: problems } = await supabase
@@ -85,21 +112,24 @@ ticketsRouter.get('/feed', async (req: AuthedRequest, res: Response) => {
   const pMap = new Map((problems ?? []).map((p) => [p.problem_id, p]));
 
   // A closed case («Закрыть» / resolved on the kk side) disappears from the
-  // feed entirely — only live conversations stay visible.
-  const CLOSED = new Set(['explained_accepted', 'fixed', 'auto_resolved']);
+  // feed entirely — only live conversations stay visible. A ticket with a
+  // pending appeal always stays open until Sona rules on it.
+  const appealsById = (id: string) => (ap ?? []).filter((r) => r.problem_id === id) as AppealRow[];
   const openIds = includeClosed
     ? ids
-    : ids.filter((id) => !CLOSED.has(pMap.get(id)?.status ?? ''));
+    : ids.filter((id) => isOpenFeedItem(pMap.get(id)?.status ?? null, !!pendingAppeal(appealsById(id))));
 
   const items = openIds.map((problemId) => {
     const p = pMap.get(problemId);
     const feedbacks = (fb ?? []).filter((r) => r.problem_id === problemId);
     const comments = (cm ?? []).filter((r) => r.problem_id === problemId).reverse(); // oldest first in thread
     const attachments = (at ?? []).filter((r) => r.problem_id === problemId).reverse();
+    const appeals = appealsById(problemId); // newest first
     const lastActivity = [
       ...feedbacks.map((r) => r.submitted_at),
       ...comments.map((r) => r.created_at),
       ...attachments.map((r) => r.created_at),
+      ...appeals.map((r) => r.resolved_at ?? r.created_at),
     ].sort().pop() ?? null;
     return {
       ticket_id: problemId.slice('sona:'.length),
@@ -111,6 +141,7 @@ ticketsRouter.get('/feed', async (req: AuthedRequest, res: Response) => {
       feedbacks,
       comments,
       attachments,
+      appeals,
       last_activity: lastActivity,
     };
   });
@@ -129,7 +160,7 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
 
   if (!problem) return res.json({ feedback: null });
 
-  const [{ data: feedbacks }, { data: actions }, { data: attachments }] = await Promise.all([
+  const [{ data: feedbacks }, { data: actions }, { data: attachments }, { data: appeals }] = await Promise.all([
     supabase
       .from('kk_accountant_feedback')
       .select('situation_comment, solution_comment, submitted_at, accountant_name')
@@ -148,6 +179,12 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
       .select('id, file_name, public_url, mime_type, uploaded_by, created_at')
       .eq('problem_id', problemId)
       .order('created_at', { ascending: true }),
+    // Appeals the accountant filed against this ticket (newest first).
+    supabase
+      .from('kk_problem_appeals')
+      .select(APPEAL_COLUMNS)
+      .eq('problem_id', problemId)
+      .order('created_at', { ascending: false }),
   ]);
 
   const latest = feedbacks?.[0] ?? null;
@@ -165,8 +202,58 @@ ticketsRouter.get('/:id/feedback', async (req: AuthedRequest, res: Response) => 
       reviewer_name: latestAction?.reviewer_name ?? null,
       review_acted_at: latestAction?.created_at ?? null,
       attachments: attachments ?? [],
+      appeals: appeals ?? [],
     },
   });
+});
+
+// Sona's decision on an accountant's appeal against one of her tickets. Mirrors
+// the kk app's own resolveAppeal() so the outcome is identical whether she rules
+// from here or from the kk management page — and so the accountant's «Мои
+// апелляции» tracker updates:
+//   approved → uphold the accountant: the issue is dismissed (verdict
+//              'not_problematic', drops from the dashboard) and any fine cancelled.
+//   rejected → keep the issue active; it returns to the accountant's queue.
+// The reviewer stays anonymous on the accountant's side. The optional comment is
+// also posted into the shared thread, which is what the accountant actually reads.
+ticketsRouter.post('/:id/appeal/resolve', async (req: AuthedRequest, res: Response) => {
+  const problemId = `sona:${req.params.id}`;
+  const decision = parseDecision(req.body?.decision);
+  const comment = String(req.body?.comment ?? '').trim() || null;
+  if (!decision) return res.status(400).json({ error: 'decision_must_be_approved_or_rejected' });
+
+  // Only one appeal can be pending per problem (kk partial-unique index).
+  const { data: appeals, error: aErr } = await supabase
+    .from('kk_problem_appeals')
+    .select(APPEAL_COLUMNS)
+    .eq('problem_id', problemId)
+    .order('created_at', { ascending: false });
+  if (aErr) return res.status(500).json({ error: aErr.message });
+
+  const pending = pendingAppeal((appeals ?? []) as AppealRow[]);
+  if (!pending) return res.status(404).json({ error: 'no_pending_appeal' });
+
+  const nowIso = new Date().toISOString();
+  const { appealPatch, problemPatch } = buildAppealResolution(decision, comment, nowIso, ANON_REVIEWER);
+
+  const { error: upErr } = await supabase
+    .from('kk_problem_appeals')
+    .update(appealPatch)
+    .eq('id', pending.id);
+  if (upErr) return res.status(500).json({ error: upErr.message });
+
+  const { error: pErr } = await supabase
+    .from('kk_problems')
+    .update(problemPatch)
+    .eq('problem_id', problemId);
+  if (pErr) return res.status(500).json({ error: pErr.message });
+
+  // The decision comment is what the accountant reads — put it in the thread.
+  if (comment) {
+    await supabase.from('kk_sona_comments').insert({ problem_id: problemId, author: ANON_REVIEWER, body: comment });
+  }
+
+  res.json({ ok: true, decision, problem_status: problemPatch.status });
 });
 
 // Sona's decision after reading the accountant's answer. Two outcomes:
