@@ -73,32 +73,26 @@ const sample: SonaTicketsDaily = {
 };
 
 test('formatSonaTicketsDailyText: full message keyed on checking_date', () => {
-  const text = formatSonaTicketsDailyText(sample);
+  const text = formatSonaTicketsDailyText({
+    ...sample,
+    responses: { total: 5, agreed: 1, appealed: 3, appealAccepted: 1, appealRejected: 1, pending: 1 },
+  });
   assert.match(text, /Ежедневный отчёт по тикетам Sona/);
   assert.match(text, /Дата: 07\.07\.2026 \(по дате проверки\)/);
   assert.match(text, /Всего тикетов: <b>5<\/b>/);
   assert.match(text, /передано бухгалтерам как тикет: 3/);
-  assert.match(text, /• Gayane: 3\n• Aida: 2/);
-  assert.match(text, /Бот посчитал: 5 тикетов\./);
-  assert.match(text, /Подтвердите число в дашборде/);
+  // «По бухгалтерам» is now the two-line appeal summary.
+  assert.match(text, /— Апелляций от бухгалтеров: <b>3<\/b>/);
+  assert.match(text, /— Проверок от Сони: <b>2<\/b>/); // 1 accepted + 1 rejected
+  // The old "Проверка точности" placeholder block is gone.
+  assert.doesNotMatch(text, /Проверка точности/);
+  assert.doesNotMatch(text, /Подтвердите число в дашборде/);
+  assert.doesNotMatch(text, /___/);
 });
 
-test('formatSonaTicketsDailyText: zero-ticket day still renders', () => {
+test('formatSonaTicketsDailyText: zero-ticket day still renders the summary', () => {
   const text = formatSonaTicketsDailyText({ ...sample, total: 0, ticketsCreated: 0, byAccountant: [], responses: sample.responses });
   assert.match(text, /Всего тикетов: <b>0<\/b>/);
-  assert.match(text, /— за день тикетов нет/);
-});
-
-test('formatSonaTicketsDailyText: shows Sona confirmation when reviewed', () => {
-  const text = formatSonaTicketsDailyText({
-    ...sample,
-    confirmation: {
-      checkDate: '2026-07-07', detectedTotal: 5, correctedTotal: 7,
-      confirmationStatus: 'incorrect', confirmedBySona: true,
-      sonaComment: 'две проверки не учтены', confirmedAt: '2026-07-07T18:00:00Z',
-    },
-  });
-  assert.match(text, /Подтверждение Sona:<\/b> ❌ отмечено как неверное/);
-  assert.match(text, /Исправлено Sona: <b>7<\/b> \(бот посчитал 5\)/);
-  assert.match(text, /Комментарий Sona: две проверки не учтены/);
+  assert.match(text, /— Апелляций от бухгалтеров: <b>0<\/b>/);
+  assert.match(text, /— Проверок от Сони: <b>0<\/b>/);
 });

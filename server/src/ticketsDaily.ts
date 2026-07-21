@@ -229,14 +229,16 @@ const ddmmyyyy = (date: string) => {
   return `${d}.${m}.${y}`;
 };
 
-const CONFIRM_LABEL: Record<ConfirmationStatus, string> = {
-  pending: 'ожидает подтверждения',
-  confirmed: '✅ подтверждено Sona',
-  incorrect: '❌ отмечено как неверное',
-  needs_review: '⚠️ требует проверки',
-};
-
 export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
+  // «По бухгалтерам» is now a two-line appeal summary rather than a per-accountant
+  // list, per Sona's request:
+  //   • «Апелляций от бухгалтеров» — how many of Sona's checks the accountant
+  //     disputed (accountant_response_status = 'appealed').
+  //   • «Проверок от Сони» — how many of those appeals Sona has already ruled on
+  //     (accepted + rejected, i.e. sona_appeal_decision is set).
+  const appealsFromAccountants = r.responses.appealed;
+  const sonaAppealReviews = r.responses.appealAccepted + r.responses.appealRejected;
+
   const lines = [
     `📊 <b>Ежедневный отчёт по тикетам Sona</b>`,
     ``,
@@ -246,32 +248,9 @@ export function formatSonaTicketsDailyText(r: SonaTicketsDaily): string {
     `(из них передано бухгалтерам как тикет: ${r.ticketsCreated})`,
     ``,
     `<b>По бухгалтерам:</b>`,
+    `— Апелляций от бухгалтеров: <b>${appealsFromAccountants}</b>`,
+    `— Проверок от Сони: <b>${sonaAppealReviews}</b>`,
   ];
-  if (r.byAccountant.length) {
-    for (const a of r.byAccountant) lines.push(`• ${a.accountant}: ${a.count}`);
-  } else {
-    lines.push(`— за день тикетов нет`);
-  }
-
-  // Reflect Sona's confirmation state if she already reviewed this day.
-  const c = r.confirmation;
-  if (c && c.confirmationStatus !== 'pending') {
-    lines.push(``, `<b>Подтверждение Sona:</b> ${CONFIRM_LABEL[c.confirmationStatus]}`);
-    if (c.correctedTotal != null && c.correctedTotal !== r.total) {
-      lines.push(`Исправлено Sona: <b>${c.correctedTotal}</b> (бот посчитал ${r.total}).`);
-    }
-    if (c.sonaComment) lines.push(`Комментарий Sona: ${c.sonaComment}`);
-  }
-
-  lines.push(
-    ``,
-    `<b>Проверка точности:</b>`,
-    `Бот посчитал: ${r.total} тикетов.`,
-    `Фактически по проверке Sona: ___ тикетов.`,
-    `Разница: ___.`,
-    ``,
-    `Подтвердите число в дашборде («Подсчёт тикетов»): совпадает ли ${r.total} с реальным количеством проверок за день?`,
-  );
   return lines.join('\n');
 }
 
