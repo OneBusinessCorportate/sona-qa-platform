@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { env } from './env.js';
 import { supabase } from './supabase.js';
 import { sendReport } from './telegram.js';
-import { todayInTz } from './time.js';
+import { yesterdayInTz } from './time.js';
 
 // Ежедневный подсчёт тикетов/проверок Sona — single source of truth shared by
 // the Telegram report AND the dashboard "Подсчёт тикетов" section. Counts the
@@ -18,6 +18,14 @@ import { todayInTz } from './time.js';
 // checks on the wrong day and produced spurious 0-ticket days. `checking_date`
 // is exactly what every other report/dashboard already uses, so Telegram and
 // the dashboard now agree by construction.
+//
+// The scheduled send reports the PREVIOUS day (see yesterdayInTz), not "today":
+// because Sona back-dates and enters late (often after midnight), a day's
+// checking_date is only complete a day later. Sending "today" at 19:00 missed
+// entries made after the previous 19:00 whose checking_date was the day that
+// had already been reported — so they were counted in no report at all. The
+// buildSonaTicketsDaily function itself is date-agnostic; only the default
+// report date changed.
 //
 // Scope: ONLY the Sona QA platform (sqa_*). AI and Margarita detections live in
 // separate mqa_* tables and are never read here; as an explicit guard we also
@@ -270,7 +278,11 @@ export async function sonaTicketsDailyCronHandler(req: Request, res: Response) {
   }
 
   try {
-    const date = String(req.query.date ?? todayInTz());
+    // Default to the day that just closed at the 19:00 cutoff (see
+    // yesterdayInTz): the scheduled caller passes no ?date, and "today" would
+    // miss Sona's late/back-dated entries. An explicit ?date= still wins (e.g.
+    // for a manual re-send of a specific day).
+    const date = String(req.query.date ?? yesterdayInTz());
     const report = await buildSonaTicketsDaily(date);
     const send = await sendReport('tickets', date, formatSonaTicketsDailyText(report));
     console.log(`[sona-tickets] telegram ${send.ok ? 'sent' : `not sent (${send.error ?? 'unknown'})`} for ${date}`);

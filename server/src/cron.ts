@@ -3,7 +3,7 @@ import { env, telegramConfigured } from './env.js';
 import { buildDailyReport, buildWeeklyReport, formatDailyText, formatWeeklyText } from './reports.js';
 import { buildSonaTicketsDaily, formatSonaTicketsDailyText } from './ticketsDaily.js';
 import { sendReport } from './telegram.js';
-import { isoWeekLabel, mondayOf, todayInTz } from './time.js';
+import { isoWeekLabel, mondayOf, todayInTz, yesterdayInTz } from './time.js';
 
 export function startCron() {
   if (!env.cronEnabled && !env.cronTicketsEnabled) {
@@ -17,7 +17,10 @@ export function startCron() {
   if (env.cronTicketsEnabled) {
     cron.schedule(env.cronTicketsDaily, async () => {
       try {
-        const date = todayInTz();
+        // Report the day that just closed at the 19:00 cutoff, not "today":
+        // Sona enters checks late/back-dated, so yesterday's checking_date is
+        // complete by now while today's is still filling up. See yesterdayInTz.
+        const date = yesterdayInTz();
         const report = await buildSonaTicketsDaily(date);
         const r = await sendReport('tickets', date, formatSonaTicketsDailyText(report));
         console.log(`[cron] sona-tickets ${date}:`, r);
