@@ -7,6 +7,24 @@ export function todayInTz(d = new Date()): string {
   }).format(d);
 }
 
+// The previous local day (YYYY-MM-DD) in the configured timezone.
+//
+// This is the default day the daily Sona ticket report covers. The report is
+// sent at the 19:00 cutoff and reports the checking_date that has just CLOSED,
+// not "today" (which is still filling up): Sona enters a day's checks in
+// batches, often late at night or in the small hours of the next calendar day
+// and back-dated to the day she actually checked. Keying the send on "today"
+// meant such a check (e.g. checking_date=20.07 entered at 02:00 on the 21st)
+// was missed by BOTH the 20.07 report — sent before it was entered — and the
+// 21.07 report — which looks for checking_date=21.07. Reporting the previous
+// day gives every checking_date a full extra day to fill in before it is
+// reported, so those late/back-dated entries are counted exactly once.
+export function yesterdayInTz(d = new Date()): string {
+  const prev = new Date(`${todayInTz(d)}T12:00:00Z`);
+  prev.setUTCDate(prev.getUTCDate() - 1);
+  return prev.toISOString().slice(0, 10);
+}
+
 // The timezone's UTC offset (e.g. "+04:00") on the given date, sampled at noon
 // UTC — exact for fixed-offset zones like Asia/Yerevan (which has no DST).
 function tzOffsetAt(dateStr: string, tz: string): string {

@@ -2,8 +2,10 @@ name: Daily Sona tickets report
 
 # Render's free instance spins down when idle, so its in-process cron can't be
 # trusted to fire at 19:00. This workflow calls the report endpoint instead —
-# the request wakes the instance (cold start ~1 min, hence the retries) and the
-# endpoint counts the day [yesterday 19:00 .. today 19:00) and sends Telegram.
+# the request wakes the instance (cold start ~1 min, hence the retries). With no
+# ?date the endpoint reports the previous local day (the one that has closed by
+# the 19:00 send; see yesterdayInTz) counted by checking_date, and sends it to
+# Telegram. This is what catches Sona's late-night / back-dated entries.
 
 on:
   schedule:
